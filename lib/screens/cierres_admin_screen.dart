@@ -13,23 +13,35 @@ class CierresAdminScreen extends StatefulWidget {
 
 class _CierresAdminScreenState extends State<CierresAdminScreen> {
   static const Color primaryDark = Color(0xFF084B53);
-  final _formatoMoneda = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+
+  // ── Formatos ───────────────────────────────────────────────────────────────
+  // Moneda con separador de miles y 2 decimales: $10,000.00
+  final _formatoMoneda = NumberFormat.currency(
+    symbol: '\$',
+    decimalDigits: 2,
+    locale: 'en_US', // coma como separador de miles, punto decimal
+  );
 
   List<Map<String, dynamic>> _historial = [];
+  double _totalHoy = 0.0;
   bool _cargando = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarHistorial();
+    _cargarDatos();
   }
 
-  Future<void> _cargarHistorial() async {
+  Future<void> _cargarDatos() async {
     setState(() => _cargando = true);
+
     final data = await DBHelper.instance.obtenerHistorialCierres();
+    final totalHoy = await DBHelper.instance.obtenerTotalVentasHoy();
+
     if (!mounted) return;
     setState(() {
       _historial = data;
+      _totalHoy = totalHoy;
       _cargando = false;
     });
   }
@@ -47,7 +59,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cierre importado y stock actualizado ✓')),
       );
-      _cargarHistorial();
+      _cargarDatos();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -56,8 +68,8 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
     }
   }
 
-  Future<void> _verDetalle(String fecha) async {
-    final resumen = await DBHelper.instance.obtenerResumenPorFecha(fecha);
+  Future<void> _verDetalle(String fechaImp) async {
+    final resumen = await DBHelper.instance.obtenerResumenPorFecha(fechaImp);
     if (!mounted) return;
 
     final detalle = resumen['detalle'] as List<dynamic>;
@@ -76,6 +88,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Handle
               Center(
                 child: Container(
                   width: 40,
@@ -86,7 +99,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text('Detalle del cierre — $fecha',
+              Text('Detalle del cierre — $fechaImp',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -112,7 +125,9 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                     final item = detalle[i];
                     return ListTile(
                       title: Text(item['nombre']),
-                      subtitle: Text('Cant: ${item['cantidadTotal']}'),
+                      subtitle: Text(
+                        'Cant: ${_formatearCantidad(item['cantidadTotal'])}',
+                      ),
                       trailing: Text(
                         _formatoMoneda.format(item['totalVendido']),
                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -126,6 +141,14 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
         ),
       ),
     );
+  }
+
+  /// Formatea cantidades: sin decimales si es entero, con 2 si tiene fracción.
+  String _formatearCantidad(dynamic valor) {
+    final d = (valor as num).toDouble();
+    return d == d.truncateToDouble()
+        ? d.toInt().toString()
+        : d.toStringAsFixed(2);
   }
 
   Widget _chipResumen(String label, String valor, Color color) {
@@ -152,6 +175,77 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
     );
   }
 
+  // ── Card: total del día ────────────────────────────────────────────────────
+  Widget _cardTotalHoy() {
+    final hoy = DateFormat('d MMM yyyy', 'es').format(DateTime.now());
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF084B53), Color(0xFF0D7A87)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            // ignore: deprecated_member_use
+            color: const Color(0xFF084B53).withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Ícono
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              // ignore: deprecated_member_use
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child:
+                const Icon(Icons.today_rounded, color: Colors.white, size: 32),
+          ),
+          const SizedBox(width: 16),
+          // Texto
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ventas del día · $hoy',
+                    style: TextStyle(
+                        // ignore: deprecated_member_use
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 12,
+                        letterSpacing: 0.4)),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _formatoMoneda.format(_totalHoy),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,14 +256,24 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _cargarHistorial,
+            onPressed: _cargarDatos,
           ),
         ],
       ),
       body: Column(
         children: [
+          // ── Card total del día ──────────────────────────────────────────
+          if (_cargando)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            )
+          else
+            _cardTotalHoy(),
+
+          // ── Botón importar ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: SizedBox(
               width: double.infinity,
               height: 52,
@@ -183,10 +287,13 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
               ),
             ),
           ),
-          const Divider(height: 1),
+
+          const Divider(height: 24),
+
+          // ── Historial ───────────────────────────────────────────────────
           Expanded(
             child: _cargando
-                ? const Center(child: CircularProgressIndicator())
+                ? const SizedBox()
                 : _historial.isEmpty
                     ? const Center(
                         child: Column(

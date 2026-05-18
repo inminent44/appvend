@@ -29,6 +29,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   bool _cargando = false;
   bool _productoExistente = false;
   bool get _esEdicion => widget.producto != null;
+  late int _idOriginal;
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       _idController.text = widget.producto!.id.toString();
       _nombreController.text = widget.producto!.nombre;
       _precioController.text = widget.producto!.precioVenta.toString();
+      _idOriginal = widget.producto!.id;
     }
   }
 
@@ -94,36 +96,53 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     }
 
     try {
-      final producto = Producto(
-        id: int.parse(_idController.text),
-        nombre: _nombreController.text.trim(),
-        precioVenta: double.parse(_precioController.text.replaceAll(',', '.')),
-      );
-      await DBHelper.instance.insertarProducto(producto);
-      if (!mounted) return;
+      final idNuevo = int.parse(_idController.text);
+      final nombre = _nombreController.text.trim();
+      final precio = double.parse(_precioController.text.replaceAll(',', '.'));
 
-      final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
-      final cant = double.tryParse(cantTexto) ?? 0;
-      if (cant != 0) {
-        await DBHelper.instance.insertarMovimiento(Movimiento(
-          productoId: producto.id,
-          cantidad: cant,
-          fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-          tipo: Movimiento.tipoAjuste,
-          nota: _esEdicion
-              ? 'Ajuste desde edición'
-              : (_productoExistente ? 'Entrada de stock' : 'Carga inicial'),
-        ));
-        if (!mounted) return;
+      if (_esEdicion) {
+        // Edición: usa el método que maneja cambio de ID
+        await DBHelper.instance.editarProducto(
+          idAnterior: _idOriginal,
+          idNuevo: idNuevo,
+          nombre: nombre,
+          precioVenta: precio,
+        );
+        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
+        final cant = double.tryParse(cantTexto) ?? 0;
+        if (cant != 0) {
+          await DBHelper.instance.insertarMovimiento(Movimiento(
+            productoId: idNuevo,
+            cantidad: cant,
+            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            tipo: Movimiento.tipoAjuste,
+            nota: 'Ajuste desde edición',
+          ));
+        }
+      } else {
+        // Nuevo producto — lógica existente sin cambios
+        final producto =
+            Producto(id: idNuevo, nombre: nombre, precioVenta: precio);
+        await DBHelper.instance.insertarProducto(producto);
+        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
+        final cant = double.tryParse(cantTexto) ?? 0;
+        if (cant != 0) {
+          await DBHelper.instance.insertarMovimiento(Movimiento(
+            productoId: producto.id,
+            cantidad: cant,
+            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            tipo: Movimiento.tipoAjuste,
+            nota: _productoExistente ? 'Entrada de stock' : 'Carga inicial',
+          ));
+        }
       }
+      if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al guardar: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _cargando = false);
     }
   }
 
@@ -217,7 +236,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 padding: const EdgeInsets.only(bottom: 15),
                 child: TextFormField(
                   controller: _idController,
-                  enabled: !_esEdicion,
+                  enabled: true,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(

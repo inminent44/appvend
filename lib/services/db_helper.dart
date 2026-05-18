@@ -134,6 +134,43 @@ class DBHelper {
     });
   }
 
+  Future<void> editarProducto({
+    required int idAnterior,
+    required int idNuevo,
+    required String nombre,
+    required double precioVenta,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      if (idAnterior != idNuevo) {
+        // Insertar con nuevo ID
+        await txn.insert(
+            'productos',
+            {
+              'id': idNuevo,
+              'nombre': nombre,
+              'precioVenta': precioVenta,
+              'stockActual': 0,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        // Reasignar movimientos al nuevo ID
+        await txn.rawUpdate(
+          'UPDATE movimientos SET producto_id = ? WHERE producto_id = ?',
+          [idNuevo, idAnterior],
+        );
+        // Borrar el viejo
+        await txn.delete('productos', where: 'id = ?', whereArgs: [idAnterior]);
+      } else {
+        await txn.update(
+          'productos',
+          {'nombre': nombre, 'precioVenta': precioVenta},
+          where: 'id = ?',
+          whereArgs: [idAnterior],
+        );
+      }
+    });
+  }
+
   // ─── MOVIMIENTOS ───────────────────────────────────────────────────────────
 
   Future<void> insertarMovimiento(Movimiento movimiento) async {
@@ -310,6 +347,21 @@ class DBHelper {
       'numeroVentas': (totales.first['numeroVentas'] as num).toInt(),
       'detalle': detalle,
     };
+  }
+
+  /// Suma el total de todas las ventas importadas HOY (por fecha_imp).
+  Future<double> obtenerTotalVentasHoy() async {
+    final db = await database;
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final result = await db.rawQuery('''
+    SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
+    FROM ventas_importadas vi
+    JOIN cierres_importados ci ON ci.id = vi.cierre_id
+    WHERE ci.fecha_imp LIKE ?
+  ''', ['$hoy%']);
+
+    return (result.first['totalHoy'] as num).toDouble();
   }
 
   // ─── BACKUP ────────────────────────────────────────────────────────────────
