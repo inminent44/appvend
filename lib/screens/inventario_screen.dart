@@ -36,7 +36,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (!mounted) return;
     setState(() {
       _productos = data;
-      _productosFiltrados = data;
+      _productosFiltrados = _searchController.text.isEmpty
+          ? data
+          : data
+              .where((p) => p['nombre']
+                  .toString()
+                  .toLowerCase()
+                  .contains(_searchController.text.toLowerCase()))
+              .toList();
       _cargando = false;
     });
   }
@@ -155,6 +162,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
         backgroundColor: primaryDark,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Actualizar inventario',
+            onPressed: _cargarProductos,
+          ),
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Exportar al vendedor',
