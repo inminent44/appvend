@@ -74,9 +74,9 @@ class DBHelper {
         // Ventas y detalles reconstruidos a partir de los cierres importados
         await db.execute('''
           CREATE TABLE ventas_importadas (
-            id_venta TEXT    NOT NULL,
-            fecha    TEXT    NOT NULL,
-            total    REAL    NOT NULL,
+            id_venta  TEXT    NOT NULL PRIMARY KEY,
+            fecha     TEXT    NOT NULL,
+            total     REAL    NOT NULL,
             cierre_id INTEGER NOT NULL,
             FOREIGN KEY (cierre_id) REFERENCES cierres_importados (id)
           )
@@ -255,11 +255,15 @@ class DBHelper {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
 
-        // Descontar del inventario del Admin
-        await txn.rawUpdate(
-          'UPDATE productos SET stockActual = stockActual - ? WHERE id = ?',
-          [cantidad, prodId],
-        );
+        // Descontar del inventario del Admin mediante un movimiento negativo
+        final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        await txn.insert('movimientos', {
+          'producto_id': prodId,
+          'cantidad': -cantidad,
+          'fecha': hoy,
+          'tipo': 'venta_vendedor',
+          'nota': 'Cierre importado: $nombreArchivo',
+        });
       }
     });
   }
