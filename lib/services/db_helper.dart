@@ -349,21 +349,6 @@ class DBHelper {
     };
   }
 
-  /// Suma el total de todas las ventas importadas HOY (por fecha_imp).
-  Future<double> obtenerTotalVentasHoy() async {
-    final db = await database;
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    final result = await db.rawQuery('''
-    SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
-    FROM ventas_importadas vi
-    JOIN cierres_importados ci ON ci.id = vi.cierre_id
-    WHERE ci.fecha_imp LIKE ?
-  ''', ['$hoy%']);
-
-    return (result.first['totalHoy'] as num).toDouble();
-  }
-
   // ─── BACKUP ────────────────────────────────────────────────────────────────
 
   /// Exporta toda la base de datos como XML cifrado (.bkp).
@@ -513,5 +498,18 @@ class DBHelper {
       }
     }
     return map;
+  }
+
+  /// Devuelve el total vendido HOY sumando todos los cierres importados hoy.
+  Future<double> obtenerTotalVentasHoy() async {
+    final db = await database;
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final result = await db.rawQuery('''
+    SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
+    FROM ventas_importadas vi
+    JOIN cierres_importados ci ON ci.id = vi.cierre_id
+    WHERE ci.fecha_imp LIKE ?
+  ''', ['$hoy%']);
+    return (result.first['totalHoy'] as num).toDouble();
   }
 }
