@@ -154,6 +154,31 @@ class _InventarioScreenState extends State<InventarioScreen> {
     _cargarProductos();
   }
 
+  Future<void> _confirmarEliminar(Map<String, dynamic> item) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar producto'),
+        content: Text('¿Seguro que deseas eliminar "${item['nombre']}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await DBHelper.instance.eliminarProducto(item['id'] as int);
+    if (!mounted) return;
+    _cargarProductos();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -198,24 +223,51 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 5),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: primaryDark,
-                            child: Text('${item['id']}',
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 12)),
-                          ),
-                          title: Text(item['nombre'],
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Stock: ${item['stockActual']}'),
-                          trailing: Text('\$${item['precioVenta']}',
-                              style: const TextStyle(
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16)),
-                          onTap: () => _irAEditar(item),
-                          onLongPress: () => _mostrarAjusteStock(item),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: primaryDark,
+                                child: Text('${item['id']}',
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 12)),
+                              ),
+                              title: Text(item['nombre'],
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
+                              subtitle: Text(
+                                  'Stock: ${(item['stockActual'] as num).toStringAsFixed(0)}'),
+                              trailing: Text(
+                                  '\$${(item['precioVenta'] as num).toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
+                              onTap: () => _irAEditar(item),
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  icon: const Icon(Icons.tune, size: 16),
+                                  label: const Text('Stock'),
+                                  onPressed: () => _mostrarAjusteStock(item),
+                                ),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  label: const Text('Editar'),
+                                  onPressed: () => _irAEditar(item),
+                                ),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.delete,
+                                      size: 16, color: Colors.red),
+                                  label: const Text('Eliminar',
+                                      style: TextStyle(color: Colors.red)),
+                                  onPressed: () => _confirmarEliminar(item),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       );
                     },

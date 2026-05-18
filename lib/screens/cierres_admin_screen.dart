@@ -15,7 +15,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   static const Color primaryDark = Color(0xFF084B53);
   final _formatoMoneda = NumberFormat.currency(
     symbol: '\$',
-    decimalDigits: 2,
+    decimalDigits: 0,
     locale: 'es_ES', // separador de miles con PUNTO: $10.000.00
   );
 
