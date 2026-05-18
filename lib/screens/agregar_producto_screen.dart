@@ -65,12 +65,18 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         productos.firstWhere((p) => p['id'] == id, orElse: () => {});
 
     if (encontrado.isNotEmpty) {
-      setState(() {
-        _productoExistente = true;
-        _nombreController.text = encontrado['nombre'] as String;
-        _precioController.text = (encontrado['precioVenta'] as num).toString();
-      });
-      _cantidadFocus.requestFocus();
+      setState(() => _productoExistente = true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Ese ID ya está en uso. Elimínalo primero si deseas reutilizarlo.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _idController.clear();
+      _nombreFocus.requestFocus();
+      return;
     } else {
       setState(() {
         _productoExistente = false;
@@ -85,7 +91,26 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _cargando = true);
 
-    if (!_esEdicion && !_productoExistente) {
+    if (!_esEdicion) {
+      final idNuevoTemp = int.tryParse(_idController.text);
+      if (idNuevoTemp != null) {
+        final actuales = await DBHelper.instance.obtenerProductosConStock();
+        final idOcupado = actuales.any((p) => p['id'] == idNuevoTemp);
+        if (idOcupado) {
+          setState(() => _cargando = false);
+          // ignore: use_build_context_synchronously
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ese ID ya está en uso. Elimínalo primero.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    if (!_esEdicion) {
       final actuales = await DBHelper.instance.obtenerProductosConStock();
       if (!mounted) return;
       if (actuales.length >= 50) {
