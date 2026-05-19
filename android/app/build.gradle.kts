@@ -1,18 +1,28 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ── Leer key.properties (local o CI) ─────────────────────────────────────────
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
+
 android {
-    namespace = "com.example.myapp"
-    compileSdk = 35
-    ndkVersion = "27.0.12077973"
+    namespace = "com.varanova.admin"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -20,28 +30,28 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.myapp"
+        applicationId = "com.varanova.vendedor"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+    // ── Firma con keystore (null-safe para CI) ────────────────────────────────
+    signingConfigs {
+        create("release") {
+            keyAlias      = keystoreProperties["keyAlias"]      as? String ?: ""
+            keyPassword   = keystoreProperties["keyPassword"]   as? String ?: ""
+            storeFile     = (keystoreProperties["storeFile"]    as? String)?.let { file(it) }
+            storePassword = keystoreProperties["storePassword"] as? String ?: ""
         }
     }
-}
 
-dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
 }
 
 flutter {

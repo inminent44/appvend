@@ -27,9 +27,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _cantidadFocus = FocusNode();
 
   bool _cargando = false;
+  // ignore: unused_field
   bool _productoExistente = false;
   bool get _esEdicion => widget.producto != null;
-  late int _idOriginal;
 
   @override
   void initState() {
@@ -38,7 +38,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       _idController.text = widget.producto!.id.toString();
       _nombreController.text = widget.producto!.nombre;
       _precioController.text = widget.producto!.precioVenta.toString();
-      _idOriginal = widget.producto!.id;
     }
   }
 
@@ -54,6 +53,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     super.dispose();
   }
 
+  // Solo se usa al crear un producto nuevo
   Future<void> _buscarProductoPorId() async {
     final id = int.tryParse(_idController.text.trim());
     if (id == null) return;
@@ -66,7 +66,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
     if (encontrado.isNotEmpty) {
       setState(() => _productoExistente = true);
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -76,7 +75,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       );
       _idController.clear();
       _nombreFocus.requestFocus();
-      return;
     } else {
       setState(() {
         _productoExistente = false;
@@ -91,14 +89,38 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _cargando = true);
 
-    if (!_esEdicion) {
-      final idNuevoTemp = int.tryParse(_idController.text);
-      if (idNuevoTemp != null) {
+    try {
+      final nombre = _nombreController.text.trim();
+      final precio = double.parse(_precioController.text.replaceAll(',', '.'));
+
+      if (_esEdicion) {
+        // ── Edición: solo nombre y precio, el ID no cambia ────────────────
+        await DBHelper.instance.editarProducto(
+          id: widget.producto!.id,
+          nombre: nombre,
+          precioVenta: precio,
+        );
+        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
+        final cant = double.tryParse(cantTexto) ?? 0;
+        if (cant != 0) {
+          await DBHelper.instance.insertarMovimiento(Movimiento(
+            productoId: widget.producto!.id,
+            cantidad: cant,
+            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            tipo: Movimiento.tipoAjuste,
+            nota: 'Ajuste desde edición',
+          ));
+        }
+      } else {
+        // ── Nuevo producto ────────────────────────────────────────────────
+        final idNuevo = int.parse(_idController.text);
+
+        // Verificar ID duplicado
         final actuales = await DBHelper.instance.obtenerProductosConStock();
-        final idOcupado = actuales.any((p) => p['id'] == idNuevoTemp);
+        final idOcupado = actuales.any((p) => p['id'] == idNuevo);
         if (idOcupado) {
           setState(() => _cargando = false);
-          // ignore: use_build_context_synchronously
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Ese ID ya está en uso. Elimínalo primero.'),
@@ -107,48 +129,19 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           );
           return;
         }
-      }
-    }
 
-    if (!_esEdicion) {
-      final actuales = await DBHelper.instance.obtenerProductosConStock();
-      if (!mounted) return;
-      if (actuales.length >= 50) {
-        setState(() => _cargando = false);
-        _mostrarAlertaLimite();
-        return;
-      }
-    }
-
-    try {
-      final idNuevo = int.parse(_idController.text);
-      final nombre = _nombreController.text.trim();
-      final precio = double.parse(_precioController.text.replaceAll(',', '.'));
-
-      if (_esEdicion) {
-        // Edición: usa el método que maneja cambio de ID
-        await DBHelper.instance.editarProducto(
-          idAnterior: _idOriginal,
-          idNuevo: idNuevo,
-          nombre: nombre,
-          precioVenta: precio,
-        );
-        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
-        final cant = double.tryParse(cantTexto) ?? 0;
-        if (cant != 0) {
-          await DBHelper.instance.insertarMovimiento(Movimiento(
-            productoId: idNuevo,
-            cantidad: cant,
-            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-            tipo: Movimiento.tipoAjuste,
-            nota: 'Ajuste desde edición',
-          ));
+        // Verificar límite
+        if (actuales.length >= 150) {
+          setState(() => _cargando = false);
+          if (!mounted) return;
+          _mostrarAlertaLimite();
+          return;
         }
-      } else {
-        // Nuevo producto — lógica existente sin cambios
+
         final producto =
             Producto(id: idNuevo, nombre: nombre, precioVenta: precio);
         await DBHelper.instance.insertarProducto(producto);
+
         final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
         final cant = double.tryParse(cantTexto) ?? 0;
         if (cant != 0) {
@@ -157,14 +150,16 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
             cantidad: cant,
             fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
             tipo: Movimiento.tipoAjuste,
-            nota: _productoExistente ? 'Entrada de stock' : 'Carga inicial',
+            nota: 'Carga inicial',
           ));
         }
       }
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
+      setState(() => _cargando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al guardar: $e')),
       );
@@ -206,7 +201,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'))
+              child: const Text('Cerrar')),
         ],
       ),
     );
@@ -234,60 +229,51 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           key: _formKey,
           child: Column(
             children: [
-              if (_productoExistente && !_esEdicion)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 15),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    border: Border.all(color: Colors.blue.shade200),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Producto existente. Solo se agregará la cantidad al stock.',
-                          style: TextStyle(color: Colors.blue, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              // ── Campo ID: editable solo al crear, bloqueado al editar ────
               Padding(
                 padding: const EdgeInsets.only(bottom: 15),
                 child: TextFormField(
                   controller: _idController,
-                  enabled: true,
+                  enabled: !_esEdicion, // ← bloqueado en edición
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
                     labelText: 'Código / ID',
                     border: const OutlineInputBorder(),
                     filled: _esEdicion,
-                    fillColor: Colors.grey[100],
+                    fillColor: Colors.grey[200],
+                    // Candado visual cuando está bloqueado
+                    suffixIcon: _esEdicion
+                        ? const Icon(Icons.lock_outline,
+                            color: Colors.grey, size: 18)
+                        : null,
+                    helperText:
+                        _esEdicion ? 'El ID no se puede modificar' : null,
                   ),
                   validator: (v) =>
                       (v == null || v.isEmpty) ? 'Requerido' : null,
-                  onEditingComplete: _buscarProductoPorId,
+                  onEditingComplete: _esEdicion ? null : _buscarProductoPorId,
                 ),
               ),
+
               _buildTextField(_nombreController, 'Nombre del producto',
                   focusNode: _nombreFocus, nextFocus: _precioFocus),
+
               _buildTextField(_precioController, 'Precio de Venta',
                   isNumber: true,
                   focusNode: _precioFocus,
                   nextFocus: _cantidadFocus),
+
+              // Stock inicial solo al crear
               if (!_esEdicion)
                 _buildTextField(
                   _cantidadController,
-                  _productoExistente ? 'Cantidad a ingresar' : 'Stock Inicial',
+                  'Stock Inicial',
                   isNumber: true,
                   focusNode: _cantidadFocus,
                 ),
+
+              // Ajuste de stock al editar
               if (_esEdicion)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 15),
@@ -307,6 +293,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                     ),
                   ),
                 ),
+
               const SizedBox(height: 30),
               SizedBox(
                 width: double.infinity,
@@ -328,8 +315,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label,
-      {bool isNumber = false, FocusNode? focusNode, FocusNode? nextFocus}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    bool isNumber = false,
+    FocusNode? focusNode,
+    FocusNode? nextFocus,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(

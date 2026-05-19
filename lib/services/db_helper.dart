@@ -15,7 +15,6 @@ class DBHelper {
   factory DBHelper() => instance;
   DBHelper._internal();
 
-  // ─── Claves AES-256 — deben coincidir con la app Vendedor ─────────────────
   static const String _aesKey = 'GestorV2024#SecureKey!XYZ@123456';
   static const String _aesIV = 'GestorV2024!IV8#';
 
@@ -49,7 +48,6 @@ class DBHelper {
             stockActual REAL    NOT NULL DEFAULT 0
           )
         ''');
-
         await db.execute('''
           CREATE TABLE movimientos (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,17 +59,13 @@ class DBHelper {
             FOREIGN KEY (producto_id) REFERENCES productos (id)
           )
         ''');
-
-        // Historial de archivos .gv importados desde los vendedores
         await db.execute('''
           CREATE TABLE cierres_importados (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            archivo   TEXT NOT NULL,
+            archivo   TEXT NOT NULL UNIQUE,
             fecha_imp TEXT NOT NULL
           )
         ''');
-
-        // Ventas y detalles reconstruidos a partir de los cierres importados
         await db.execute('''
           CREATE TABLE ventas_importadas (
             id_venta  TEXT    NOT NULL PRIMARY KEY,
@@ -81,7 +75,6 @@ class DBHelper {
             FOREIGN KEY (cierre_id) REFERENCES cierres_importados (id)
           )
         ''');
-
         await db.execute('''
           CREATE TABLE detalle_venta_importada (
             id_detalle  TEXT    NOT NULL,
@@ -118,11 +111,8 @@ class DBHelper {
 
   Future<void> insertarProducto(Producto producto) async {
     final db = await database;
-    await db.insert(
-      'productos',
-      producto.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('productos', producto.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> eliminarProducto(int id) async {
@@ -134,41 +124,19 @@ class DBHelper {
     });
   }
 
+  // ── Editar producto SIN permitir cambiar el ID ─────────────────────────────
   Future<void> editarProducto({
-    required int idAnterior,
-    required int idNuevo,
+    required int id,
     required String nombre,
     required double precioVenta,
   }) async {
     final db = await database;
-    await db.transaction((txn) async {
-      if (idAnterior != idNuevo) {
-        // Insertar con nuevo ID
-        await txn.insert(
-            'productos',
-            {
-              'id': idNuevo,
-              'nombre': nombre,
-              'precioVenta': precioVenta,
-              'stockActual': 0,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-        // Reasignar movimientos al nuevo ID
-        await txn.rawUpdate(
-          'UPDATE movimientos SET producto_id = ? WHERE producto_id = ?',
-          [idNuevo, idAnterior],
-        );
-        // Borrar el viejo
-        await txn.delete('productos', where: 'id = ?', whereArgs: [idAnterior]);
-      } else {
-        await txn.update(
-          'productos',
-          {'nombre': nombre, 'precioVenta': precioVenta},
-          where: 'id = ?',
-          whereArgs: [idAnterior],
-        );
-      }
-    });
+    await db.update(
+      'productos',
+      {'nombre': nombre, 'precioVenta': precioVenta},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ─── MOVIMIENTOS ───────────────────────────────────────────────────────────
@@ -195,10 +163,10 @@ class DBHelper {
   }
 
   // ─── EXPORTAR INVENTARIO AL VENDEDOR ──────────────────────────────────────
+  // Guarda el archivo directamente en el almacenamiento del dispositivo
+  // (carpeta Descargas) sin abrir el selector de apps para compartir.
 
-  /// Genera un archivo .inv cifrado con todos los productos y su stock actual,
-  /// listo para importar desde la app Vendedor.
-  Future<void> exportarInventario() async {
+  Future<String> exportarInventario() async {
     final productos = await obtenerProductosConStock();
 
     final builder = XmlBuilder();
@@ -216,48 +184,60 @@ class DBHelper {
 
     final xmlStr = builder.buildDocument().toXmlString();
     final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-
-    final dir = await getTemporaryDirectory();
     final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
+
+    // Guardar en Descargas del dispositivo
+    Directory? dir;
+    if (Platform.isAndroid) {
+      dir = Directory('/storage/emulated/0/Download');
+      if (!await dir.exists()) {
+        dir = await getExternalStorageDirectory() ??
+            await getTemporaryDirectory();
+      }
+    } else {
+      dir = await getApplicationDocumentsDirectory();
+    }
+
     final file = File('${dir.path}/inventario_$hoy.inv');
     await file.writeAsString(encrypted.base64);
-
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Inventario exportado $hoy',
-    );
+    return file.path;
   }
 
-  // ─── CIERRES DE CAJA (importados desde el Vendedor) ───────────────────────
+  // ─── CIERRES DE CAJA ──────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> obtenerHistorialCierres() async {
     final db = await database;
-    return db.query(
-      'cierres_importados',
-      orderBy: 'id DESC',
-    );
+    return db.query('cierres_importados', orderBy: 'id DESC');
   }
 
-  /// Importa un archivo .gv del vendedor, descifra el XML,
-  /// persiste ventas y detalles, y descuenta el stock.
+  /// Devuelve true si el archivo ya fue importado anteriormente.
+  Future<bool> cierreYaImportado(String nombreArchivo) async {
+    final db = await database;
+    final res = await db.query(
+      'cierres_importados',
+      where: 'archivo = ?',
+      whereArgs: [nombreArchivo],
+      limit: 1,
+    );
+    return res.isNotEmpty;
+  }
+
   Future<void> importarCierreCaja(File archivo) async {
     final db = await database;
     final contenido = await archivo.readAsString();
     final xmlString =
         _encrypter.decrypt(enc.Encrypted.fromBase64(contenido), iv: _iv);
     final document = XmlDocument.parse(xmlString);
-
     final nombreArchivo = archivo.path.split('/').last;
     final fechaImp = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
     await db.transaction((txn) async {
-      // Registrar el cierre
-      final cierreId = await txn.insert('cierres_importados', {
-        'archivo': nombreArchivo,
-        'fecha_imp': fechaImp,
-      });
+      final cierreId = await txn.insert(
+        'cierres_importados',
+        {'archivo': nombreArchivo, 'fecha_imp': fechaImp},
+        conflictAlgorithm: ConflictAlgorithm.fail, // falla si ya existe
+      );
 
-      // Ventas
       for (final v in document.findAllElements('Venta')) {
         final data = _xmlToMap(v);
         await txn.insert(
@@ -272,7 +252,6 @@ class DBHelper {
         );
       }
 
-      // Detalles + descuento de stock
       for (final d in document.findAllElements('Detalle')) {
         final data = _xmlToMap(d);
         final cantidad = double.tryParse(data['cantidad'].toString()) ?? 0.0;
@@ -292,7 +271,6 @@ class DBHelper {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
 
-        // Descontar del inventario del Admin mediante un movimiento negativo
         final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
         await txn.insert('movimientos', {
           'producto_id': prodId,
@@ -305,11 +283,8 @@ class DBHelper {
     });
   }
 
-  /// Devuelve totales y detalle por producto de UN cierre (fecha_imp).
   Future<Map<String, dynamic>> obtenerResumenPorFecha(String fechaImp) async {
     final db = await database;
-
-    // Obtener el id del cierre que corresponde a esa fecha_imp
     final cierres = await db.query(
       'cierres_importados',
       where: 'fecha_imp = ?',
@@ -351,7 +326,6 @@ class DBHelper {
 
   // ─── BACKUP ────────────────────────────────────────────────────────────────
 
-  /// Exporta toda la base de datos como XML cifrado (.bkp).
   Future<void> exportarBackup() async {
     final db = await database;
     final productos = await db.query('productos');
@@ -372,7 +346,6 @@ class DBHelper {
 
     final xmlStr = builder.buildDocument().toXmlString();
     final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-
     final dir = await getTemporaryDirectory();
     final hoy = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
     final file = File('${dir.path}/backup_admin_$hoy.bkp');
@@ -384,7 +357,6 @@ class DBHelper {
     );
   }
 
-  /// Restaura la base de datos desde un archivo .bkp cifrado.
   Future<void> restaurarBackup(File archivo) async {
     final db = await database;
     final contenido = await archivo.readAsString();
@@ -393,14 +365,12 @@ class DBHelper {
     final document = XmlDocument.parse(xmlString);
 
     await db.transaction((txn) async {
-      // Limpiar todo
       await txn.delete('detalle_venta_importada');
       await txn.delete('ventas_importadas');
       await txn.delete('cierres_importados');
       await txn.delete('movimientos');
       await txn.delete('productos');
 
-      // Restaurar productos
       for (final el in document.findAllElements('Producto')) {
         final m = _xmlToMap(el);
         await txn.insert(
@@ -415,8 +385,6 @@ class DBHelper {
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
-
-      // Restaurar movimientos
       for (final el in document.findAllElements('Movimiento')) {
         final m = _xmlToMap(el);
         await txn.insert(
@@ -431,8 +399,6 @@ class DBHelper {
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
-
-      // Restaurar cierres
       for (final el in document.findAllElements('Cierre')) {
         final m = _xmlToMap(el);
         await txn.insert(
@@ -444,8 +410,6 @@ class DBHelper {
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
-
-      // Restaurar ventas importadas
       for (final el in document.findAllElements('Venta')) {
         final m = _xmlToMap(el);
         await txn.insert(
@@ -458,8 +422,6 @@ class DBHelper {
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
-
-      // Restaurar detalles
       for (final el in document.findAllElements('Detalle')) {
         final m = _xmlToMap(el);
         await txn.insert(
@@ -500,16 +462,15 @@ class DBHelper {
     return map;
   }
 
-  /// Devuelve el total vendido HOY sumando todos los cierres importados hoy.
   Future<double> obtenerTotalVentasHoy() async {
     final db = await database;
     final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final result = await db.rawQuery('''
-    SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
-    FROM ventas_importadas vi
-    JOIN cierres_importados ci ON ci.id = vi.cierre_id
-    WHERE ci.fecha_imp LIKE ?
-  ''', ['$hoy%']);
+      SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
+      FROM ventas_importadas vi
+      JOIN cierres_importados ci ON ci.id = vi.cierre_id
+      WHERE ci.fecha_imp LIKE ?
+    ''', ['$hoy%']);
     return (result.first['totalHoy'] as num).toDouble();
   }
 }

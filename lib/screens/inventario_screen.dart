@@ -38,24 +38,26 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _productos = data;
       _productosFiltrados = _searchController.text.isEmpty
           ? data
-          : data
-              .where((p) => p['nombre']
-                  .toString()
-                  .toLowerCase()
-                  .contains(_searchController.text.toLowerCase()))
-              .toList();
+          : _aplicarFiltro(data, _searchController.text);
       _cargando = false;
     });
   }
 
+  // ── Búsqueda por nombre O por ID ──────────────────────────────────────────
+  List<Map<String, dynamic>> _aplicarFiltro(
+      List<Map<String, dynamic>> lista, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return lista;
+    return lista.where((p) {
+      final porNombre = p['nombre'].toString().toLowerCase().contains(q);
+      final porId = p['id'].toString() == q; // coincidencia exacta de ID
+      return porNombre || porId;
+    }).toList();
+  }
+
   void _filtrar(String query) {
     setState(() {
-      _productosFiltrados = _productos
-          .where((p) => p['nombre']
-              .toString()
-              .toLowerCase()
-              .contains(query.toLowerCase()))
-          .toList();
+      _productosFiltrados = _aplicarFiltro(_productos, query);
     });
   }
 
@@ -81,10 +83,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Future<void> _exportarInventario() async {
     try {
-      await DBHelper.instance.exportarInventario();
+      final ruta = await DBHelper.instance.exportarInventario();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inventario exportado correctamente')),
+        SnackBar(content: Text('Inventario guardado en:\n$ruta')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -207,7 +209,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             child: TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                hintText: 'Buscar producto...',
+                hintText: 'Buscar por nombre o ID...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),

@@ -16,7 +16,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   final _formatoMoneda = NumberFormat.currency(
     symbol: '\$',
     decimalDigits: 0,
-    locale: 'es_ES', // separador de miles con PUNTO: $10.000.00
+    locale: 'es_ES',
   );
 
   List<Map<String, dynamic>> _historial = [];
@@ -47,10 +47,51 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   Future<void> _importarArchivo() async {
     final result = await FilePicker.platform.pickFiles();
     if (result == null) return;
-
     final path = result.files.single.path;
     if (path == null) return;
 
+    final nombreArchivo = path.split('/').last;
+
+    // ── Verificar si ya fue importado ─────────────────────────────────────
+    final yaImportado =
+        await DBHelper.instance.cierreYaImportado(nombreArchivo);
+    if (!mounted) return;
+
+    if (yaImportado) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 26),
+              SizedBox(width: 10),
+              Text('Cierre duplicado'),
+            ],
+          ),
+          content: Text(
+            'El archivo "$nombreArchivo" ya fue importado anteriormente.\n\n'
+            'No se puede importar el mismo cierre dos veces.',
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryDark,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // ── Importar normalmente ───────────────────────────────────────────────
     try {
       await DBHelper.instance.importarCierreCaja(File(path));
       if (!mounted) return;
@@ -69,7 +110,6 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   Future<void> _verDetalle(String fecha) async {
     final resumen = await DBHelper.instance.obtenerResumenPorFecha(fecha);
     if (!mounted) return;
-
     final detalle = resumen['detalle'] as List<dynamic>;
 
     showModalBottomSheet(
@@ -214,8 +254,6 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
               ),
             ),
           ),
-
-          // ── botón importar ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
