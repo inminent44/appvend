@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/db_helper.dart';
+import '../services/auth_service.dart';
 
 class BackupScreen extends StatelessWidget {
   const BackupScreen({super.key});
@@ -62,6 +63,86 @@ class BackupScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _cambiarPassword(BuildContext context) async {
+    final actualController = TextEditingController();
+    final nuevoController = TextEditingController();
+    final confirmarController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cambiar Contraseña'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: actualController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                  labelText: 'Contraseña actual', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nuevoController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                  labelText: 'Nueva contraseña', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmarController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                  labelText: 'Confirmar nueva contraseña',
+                  border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: primaryDark, foregroundColor: Colors.white),
+            onPressed: () async {
+              if (nuevoController.text != confirmarController.text) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Las contraseñas no coinciden')),
+                );
+                return;
+              }
+              if (nuevoController.text.length < 4) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mínimo 4 caracteres')),
+                );
+                return;
+              }
+              final ok =
+                  await AuthService.instance.login(actualController.text);
+              if (!context.mounted) return;
+              if (!ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Contraseña actual incorrecta')),
+                );
+                return;
+              }
+              await AuthService.instance
+                  .actualizarPassword(nuevoController.text);
+              if (!context.mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Contraseña actualizada correctamente ✓')),
+              );
+            },
+            child: const Text('GUARDAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,6 +164,15 @@ class BackupScreen extends StatelessWidget {
               style: TextStyle(color: Colors.grey, fontSize: 15),
             ),
             const SizedBox(height: 48),
+            _buildBoton(
+              context,
+              icon: Icons.lock_reset,
+              label: 'CAMBIAR CONTRASEÑA',
+              subtitle: 'Actualiza tu contraseña de acceso',
+              color: primaryDark,
+              onTap: () => _cambiarPassword(context),
+            ),
+            const SizedBox(height: 16),
             _buildBoton(
               context,
               icon: Icons.backup_outlined,

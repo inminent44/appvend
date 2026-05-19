@@ -14,6 +14,8 @@ class AuthService {
 
   bool _sesionActiva = false;
   bool get sesionActiva => _sesionActiva;
+  bool _esGestorV = false;
+  bool get esGestorV => _esGestorV;
 
   String _hashPassword(String password) {
     final bytes = utf8.encode(password);
@@ -32,8 +34,9 @@ class AuthService {
     // Superusuario de emergencia
     if (password == 'Gandalf*123') {
       _sesionActiva = true;
+      _esGestorV = true;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyUsuario, 'admin');
+      await prefs.setString(_keyUsuario, 'gestorv');
       return true;
     }
 
@@ -51,6 +54,7 @@ class AuthService {
 
   Future<void> logout() async {
     _sesionActiva = false;
+    _esGestorV = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyUsuario);
   }

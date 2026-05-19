@@ -202,7 +202,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Límite de Productos'),
-        content: const Text('Has alcanzado el límite de 50 productos.'),
+        content: const Text('Has alcanzado el límite de 150 productos.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),

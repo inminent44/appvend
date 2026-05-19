@@ -110,7 +110,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Cantidad (actual: ${item['stockActual']})',
+                labelText:
+                    'Cantidad (actual: ${(item['stockActual'] as num).toInt()})',
                 border: const OutlineInputBorder(),
               ),
             ),
