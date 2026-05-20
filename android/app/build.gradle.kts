@@ -39,13 +39,16 @@ android {
 
     // ── Firma con keystore (null-safe para CI) ────────────────────────────────
     signingConfigs {
-        create("release") {
-            keyAlias      = keystoreProperties["keyAlias"]      as? String ?: ""
-            keyPassword   = keystoreProperties["keyPassword"]   as? String ?: ""
-            storeFile     = (keystoreProperties["storeFile"]    as? String)?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as? String ?: ""
-        }
+    create("release") {
+        keyAlias = keystoreProperties["keyAlias"] as String
+        keyPassword = keystoreProperties["keyPassword"] as String
+        storePassword = keystoreProperties["storePassword"] as String
+
+        val storeFilePath = keystoreProperties["storeFile"] as String
+
+        storeFile = file("$projectDir/app/$storeFilePath")
     }
+}
 
     buildTypes {
         release {

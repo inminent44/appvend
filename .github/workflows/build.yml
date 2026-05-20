@@ -25,11 +25,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # ── KEYSORE DECODING ─────────────────────────────
       - name: Decode keystore
         shell: bash
         run: |
-          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/varanova.jks
+          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/varanova.jks
 
+      - name: Verify keystore
+        run: |
+          ls -lah android/app
+          file android/app/varanova.jks
+
+      # ── KEY PROPERTIES ───────────────────────────────
       - name: Create key.properties
         run: |
           echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
@@ -37,10 +44,12 @@ jobs:
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=varanova.jks" >> android/key.properties
 
+      # ── BUILD ────────────────────────────────────────
       - name: Build Obfuscated APK
         run: |
           flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols
 
+      # ── ARTIFACTS ────────────────────────────────────
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
