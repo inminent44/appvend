@@ -83,11 +83,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Future<void> _exportarInventario() async {
     try {
-      final ruta = await DBHelper.instance.exportarInventario();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Inventario guardado en:\n$ruta')),
-      );
+      await DBHelper.instance.exportarInventario();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

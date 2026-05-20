@@ -124,7 +124,6 @@ class DBHelper {
     });
   }
 
-  // ── Editar producto SIN permitir cambiar el ID ─────────────────────────────
   Future<void> editarProducto({
     required int id,
     required String nombre,
@@ -163,10 +162,9 @@ class DBHelper {
   }
 
   // ─── EXPORTAR INVENTARIO AL VENDEDOR ──────────────────────────────────────
-  // Guarda el archivo directamente en el almacenamiento del dispositivo
-  // (carpeta Descargas) sin abrir el selector de apps para compartir.
+  // Se comparte por WhatsApp, email, Drive, etc.
 
-  Future<String> exportarInventario() async {
+  Future<void> exportarInventario() async {
     final productos = await obtenerProductosConStock();
 
     final builder = XmlBuilder();
@@ -184,23 +182,15 @@ class DBHelper {
 
     final xmlStr = builder.buildDocument().toXmlString();
     final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
+    final dir = await getTemporaryDirectory();
     final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
-
-    // Guardar en Descargas del dispositivo
-    Directory? dir;
-    if (Platform.isAndroid) {
-      dir = Directory('/storage/emulated/0/Download');
-      if (!await dir.exists()) {
-        dir = await getExternalStorageDirectory() ??
-            await getTemporaryDirectory();
-      }
-    } else {
-      dir = await getApplicationDocumentsDirectory();
-    }
-
     final file = File('${dir.path}/inventario_$hoy.inv');
     await file.writeAsString(encrypted.base64);
-    return file.path;
+
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: 'Inventario $hoy',
+    );
   }
 
   // ─── CIERRES DE CAJA ──────────────────────────────────────────────────────
@@ -210,7 +200,6 @@ class DBHelper {
     return db.query('cierres_importados', orderBy: 'id DESC');
   }
 
-  /// Devuelve true si el archivo ya fue importado anteriormente.
   Future<bool> cierreYaImportado(String nombreArchivo) async {
     final db = await database;
     final res = await db.query(
@@ -235,7 +224,7 @@ class DBHelper {
       final cierreId = await txn.insert(
         'cierres_importados',
         {'archivo': nombreArchivo, 'fecha_imp': fechaImp},
-        conflictAlgorithm: ConflictAlgorithm.fail, // falla si ya existe
+        conflictAlgorithm: ConflictAlgorithm.fail,
       );
 
       for (final v in document.findAllElements('Venta')) {
@@ -325,8 +314,9 @@ class DBHelper {
   }
 
   // ─── BACKUP ────────────────────────────────────────────────────────────────
+  // Se guarda directamente en el dispositivo sin opción de compartir.
 
-  Future<void> exportarBackup() async {
+  Future<String> exportarBackup() async {
     final db = await database;
     final productos = await db.query('productos');
     final movimientos = await db.query('movimientos');
@@ -346,15 +336,23 @@ class DBHelper {
 
     final xmlStr = builder.buildDocument().toXmlString();
     final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-    final dir = await getTemporaryDirectory();
     final hoy = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-    final file = File('${dir.path}/backup_admin_$hoy.bkp');
-    await file.writeAsString(encrypted.base64);
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Backup VaraNova Admin — $hoy',
-    );
+    // Guardar en Descargas del dispositivo sin compartir
+    Directory? destDir;
+    if (Platform.isAndroid) {
+      destDir = Directory('/storage/emulated/0/Download');
+      if (!await destDir.exists()) {
+        destDir = await getExternalStorageDirectory() ??
+            await getTemporaryDirectory();
+      }
+    } else {
+      destDir = await getApplicationDocumentsDirectory();
+    }
+
+    final file = File('${destDir.path}/backup_admin_$hoy.bkp');
+    await file.writeAsString(encrypted.base64);
+    return file.path;
   }
 
   Future<void> restaurarBackup(File archivo) async {

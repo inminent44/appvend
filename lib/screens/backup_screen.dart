@@ -11,7 +11,11 @@ class BackupScreen extends StatelessWidget {
 
   Future<void> _exportarBackup(BuildContext context) async {
     try {
-      await DBHelper.instance.exportarBackup();
+      final ruta = await DBHelper.instance.exportarBackup();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backup guardado en:\n$ruta')),
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
