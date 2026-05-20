@@ -108,7 +108,8 @@ class _MainAdminScreenState extends State<MainAdminScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.cloud_sync_outlined, color: primaryDark),
+              leading:
+                  const Icon(Icons.cloud_sync_outlined, color: primaryDark),
               title: const Text('Ir a Backup / Exportar'),
               onTap: () {
                 Navigator.pop(context);
