@@ -37,18 +37,20 @@ android {
         versionName = flutter.versionName
     }
 
-    // ── Firma con keystore (null-safe para CI) ────────────────────────────────
+    // ── FIRMA (CORREGIDA Y SIN RUTAS ROTAS) ───────────────────────────────────
     signingConfigs {
-    create("release") {
-        keyAlias = keystoreProperties["keyAlias"] as String
-        keyPassword = keystoreProperties["keyPassword"] as String
-        storePassword = keystoreProperties["storePassword"] as String
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storePassword = keystoreProperties["storePassword"] as String
 
-        val storeFilePath = keystoreProperties["storeFile"] as String
+            val storeFilePath = keystoreProperties["storeFile"] as String
 
-        storeFile = file("$projectDir/app/$storeFilePath")
+            // IMPORTANTE:
+            // el path ya viene relativo a android/app/
+            storeFile = file(storeFilePath)
+        }
     }
-}
 
     buildTypes {
         release {
