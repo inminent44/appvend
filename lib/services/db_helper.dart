@@ -341,11 +341,8 @@ class DBHelper {
     // Guardar en Descargas del dispositivo sin compartir
     Directory? destDir;
     if (Platform.isAndroid) {
-      destDir = Directory('/storage/emulated/0/Download');
-      if (!await destDir.exists()) {
-        destDir = await getExternalStorageDirectory() ??
-            await getTemporaryDirectory();
-      }
+      destDir =
+          await getExternalStorageDirectory() ?? await getTemporaryDirectory();
     } else {
       destDir = await getApplicationDocumentsDirectory();
     }
