@@ -92,67 +92,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  Future<void> _mostrarAjusteStock(Map<String, dynamic> item) async {
-    final stockController = TextEditingController();
-    final notaController = TextEditingController();
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Ajustar stock: ${item['nombre']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: stockController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText:
-                    'Cantidad (actual: ${(item['stockActual'] as num).toInt()})',
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notaController,
-              decoration: const InputDecoration(
-                labelText: 'Nota / motivo',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final cantidad = double.tryParse(
-                  stockController.text.trim().replaceAll(',', '.'));
-              if (cantidad == null) return;
-              await DBHelper.instance.ajustarStock(
-                productoId: item['id'] as int,
-                cantidad: cantidad,
-                nota: notaController.text.trim().isEmpty
-                    ? 'Ajuste manual'
-                    : notaController.text.trim(),
-              );
-              if (!context.mounted) return;
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    _cargarProductos();
-  }
-
   Future<void> _confirmarEliminar(Map<String, dynamic> item) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -237,7 +176,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                               subtitle: Text(
                                   'Stock: ${(item['stockActual'] as num).toStringAsFixed(0)}'),
                               trailing: Text(
-                                  '\$${(item['precioVenta'] as num).toStringAsFixed(0)}',
+                                  '\$${(item['precioVenta'] as num).toStringAsFixed(2)}',
                                   style: const TextStyle(
                                       color: Colors.green,
                                       fontWeight: FontWeight.bold,
@@ -247,11 +186,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                TextButton.icon(
-                                  icon: const Icon(Icons.tune, size: 16),
-                                  label: const Text('Stock'),
-                                  onPressed: () => _mostrarAjusteStock(item),
-                                ),
                                 TextButton.icon(
                                   icon: const Icon(Icons.edit, size: 16),
                                   label: const Text('Editar'),
