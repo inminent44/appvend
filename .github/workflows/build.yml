@@ -28,7 +28,7 @@ jobs:
       # ── BUILD ────────────────────────────────────────
       - name: Build Obfuscated APK
         run: |
-          flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols
+          flutter build apk --release
 
       # ── ARTIFACTS ────────────────────────────────────
       - name: Upload APK
