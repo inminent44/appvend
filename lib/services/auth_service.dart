@@ -23,11 +23,12 @@ class AuthService {
   }
 
   Future<bool> verificarSesion() async {
-    final prefs = await SharedPreferences.getInstance();
-    final activa = prefs.getString(_keyUsuario) != null;
-    _sesionActiva = activa;
-    return activa;
-  }
+  final prefs = await SharedPreferences.getInstance();
+  final usuario = prefs.getString(_keyUsuario);
+  _sesionActiva = usuario != null;
+  _esGestorV = usuario == 'gestorv';
+  return _sesionActiva;
+}
 
   /// Login simplificado — la app Admin solo tiene UN admin.
   Future<bool> login(String password) async {
