@@ -1,7 +1,7 @@
+// lib/screens/cuenta_detalle_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:pos_caja/app_theme.dart';
 import '../../models/cuenta_abierta.dart';
 import '../../services/db_helper_cajero.dart';
 
@@ -14,12 +14,17 @@ class CuentaDetalleScreen extends StatefulWidget {
 }
 
 class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
+  // ── Colores ───────────────────────────────────────────────────────────────
+  static const Color primaryDark = Color(0xFF084B53);
+  static const Color primaryMid = Color(0xFF0A6B77);
+  static const Color bgPage = Color(0xFFF4F6F8);
+
   CuentaAbierta? _cuenta;
   List<Map<String, dynamic>> _productos = [];
   bool _cargando = true;
   bool _cobrando = false;
 
-  final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2, locale: 'es_MX');
+  final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0, locale: 'es_MX');
 
   @override
   void initState() {
@@ -41,12 +46,13 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     });
   }
 
-  Future<void> _mostrarSelectorProductos() async {
+  // ── Agregar producto ──────────────────────────────────────────────────────
+  Future<void> _mostrarSelector() async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ProductGridSheet(
+      builder: (_) => _ProductoSheet(
         productos: _productos,
         onAgregar: _agregarProducto,
       ),
@@ -69,6 +75,8 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(e.toString().replaceFirst('Exception: ', '')),
         backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
     }
   }
@@ -84,15 +92,22 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
   }
 
   Future<void> _sumarItem(ItemCuenta item) async {
-    final prod = _productos.firstWhere((p) => p['id'] == item.productoId, orElse: () => {});
+    // Buscar el producto real para respetar el stock actual
+    final prod = _productos.firstWhere(
+      (p) => p['id'] == item.productoId,
+      orElse: () => {},
+    );
     if (prod.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sin stock disponible')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sin stock disponible'),
+        backgroundColor: Colors.red,
+      ));
       return;
     }
     await _agregarProducto(prod, 1);
   }
 
+  // ── Cobrar ────────────────────────────────────────────────────────────────
   Future<void> _cobrar() async {
     if (_cuenta == null || _cuenta!.items.isEmpty) return;
 
@@ -100,7 +115,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _TicketCobroSheet(cuenta: _cuenta!, fmt: _fmt),
+      builder: (_) => _TicketCobro(cuenta: _cuenta!, fmt: _fmt),
     );
 
     if (confirmar != true || !mounted) return;
@@ -111,97 +126,295 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${_cuenta!.nombre} — ${_fmt.format(_cuenta!.total)} cobrado ✓'),
-        backgroundColor: Colors.green,
+        content: Row(children: [
+          const Icon(Icons.check_circle, color: Colors.white),
+          const SizedBox(width: 10),
+          Text('${_cuenta!.nombre} — ${_fmt.format(_cuenta!.total)} cobrado ✓'),
+        ]),
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
     } catch (e) {
       if (!mounted) return;
       setState(() => _cobrando = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error al cobrar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al cobrar: $e'),
+        backgroundColor: Colors.red.shade700,
+      ));
     }
   }
 
+  // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     if (_cargando) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
     if (_cuenta == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Error')),
+        appBar: AppBar(title: const Text('Cuenta'), backgroundColor: primaryDark,
+            foregroundColor: Colors.white),
         body: const Center(child: Text('Cuenta no encontrada')),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_cuenta!.nombre),
-            Text(
-              '${_cuenta!.items.length} productos',
-              style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
-            ),
-          ],
-        ),
+      backgroundColor: bgPage,
+      body: Column(
+        children: [
+          // ── Header ──────────────────────────────────────────────────
+          _buildHeader(),
+
+          // ── Lista de items ───────────────────────────────────────────
+          Expanded(
+            child: _cuenta!.items.isEmpty
+                ? _emptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    itemCount: _cuenta!.items.length,
+                    itemBuilder: (_, i) => _itemCard(_cuenta!.items[i], i),
+                  ),
+          ),
+
+          // ── Footer total + cobrar ────────────────────────────────────
+          _buildFooter(),
+        ],
       ),
-      body: _cuenta!.items.isEmpty
-          ? _buildEmptyState(textTheme)
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 150),
-              itemCount: _cuenta!.items.length,
-              itemBuilder: (_, i) => _buildItemCard(_cuenta!.items[i], textTheme),
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add),
-        label: const Text('Agregar'),
-        onPressed: _mostrarSelectorProductos,
-      ),
-      bottomSheet: _buildFooter(textTheme),
     );
   }
 
-  Widget _buildItemCard(ItemCuenta item, TextTheme textTheme) {
-    return Card(
+  // ── Header ───────────────────────────────────────────────────────────────
+  Widget _buildHeader() {
+    final minutos =
+        DateTime.now().difference(_cuenta!.abiertaEn).inMinutes;
+    final tiempoStr = minutos < 60
+        ? '$minutos min'
+        : '${(minutos / 60).floor()}h ${minutos % 60}min';
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [primaryDark, primaryMid],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 8,
+        right: 16,
+        bottom: 20,
+      ),
+      child: Column(
+        children: [
+          // Fila superior: back + nombre + agregar
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _cuenta!.nombre,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Abierta hace $tiempoStr',
+                      style: const TextStyle(
+                          color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              // Botón agregar producto
+              GestureDetector(
+                onTap: _mostrarSelector,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, color: Colors.white, size: 18),
+                      SizedBox(width: 4),
+                      Text('Agregar',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Fila stats: items · total
+          Row(
+            children: [
+              const SizedBox(width: 16),
+              _statChip(
+                  Icons.shopping_bag_outlined,
+                  '${_cuenta!.items.length} producto${_cuenta!.items.length != 1 ? 's' : ''}'),
+              const SizedBox(width: 10),
+              _statChip(Icons.attach_money,
+                  _fmt.format(_cuenta!.total)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white70, size: 14),
+          const SizedBox(width: 5),
+          Text(label,
+              style:
+                  const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  // ── Item card ─────────────────────────────────────────────────────────────
+  Widget _itemCard(ItemCuenta item, int index) {
+    final colores = [
+      const Color(0xFF084B53),
+      const Color(0xFFE53935),
+      const Color(0xFFF57C00),
+      const Color(0xFF7B1FA2),
+      const Color(0xFF1565C0),
+      const Color(0xFF2E7D32),
+    ];
+    final color = colores[index % colores.length];
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 3)),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
+            // Letra / ícono
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  item.nombre.substring(0, 1).toUpperCase(),
+                  style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Nombre + precio unitario
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.nombre, style: textTheme.titleMedium),
+                  Text(item.nombre,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF1A1A2E))),
                   const SizedBox(height: 2),
-                  Text('${_fmt.format(item.precio)} c/u', style: textTheme.bodySmall),
+                  Text('${_fmt.format(item.precio)} c/u',
+                      style: TextStyle(
+                          color: Colors.grey.shade500, fontSize: 12)),
                 ],
               ),
             ),
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                  onPressed: () => _quitarItem(item),
-                ),
-                Text(item.cantidad.toStringAsFixed(0), style: textTheme.titleMedium),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary),
-                  onPressed: () => _sumarItem(item),
-                ),
-              ],
+
+            // Controles cantidad
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F6F8),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Row(
+                children: [
+                  _circleBtn(
+                    icon: Icons.remove,
+                    color: Colors.red.shade400,
+                    onTap: () => _quitarItem(item),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      item.cantidad.toStringAsFixed(0),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1A1A2E)),
+                    ),
+                  ),
+                  _circleBtn(
+                    icon: Icons.add,
+                    color: primaryDark,
+                    onTap: () => _sumarItem(item),
+                  ),
+                ],
+              ),
             ),
+
             const SizedBox(width: 12),
+
+            // Subtotal
             SizedBox(
-              width: 75,
+              width: 68,
               child: Text(
                 _fmt.format(item.subtotal),
                 textAlign: TextAlign.end,
-                style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: primaryDark),
               ),
             ),
           ],
@@ -210,77 +423,203 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     );
   }
 
-  Widget _buildFooter(TextTheme textTheme) {
-    final hayItems = _cuenta!.items.isNotEmpty;
-    return Material(
-      elevation: 8,
+  Widget _circleBtn(
+      {required IconData icon,
+      required Color color,
+      required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color, size: 16),
+      ),
+    );
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  Widget _buildFooter() {
+    final hayItems = _cuenta!.items.isNotEmpty;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 16,
+              offset: const Offset(0, -4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Desglose rápido si hay items
+          if (hayItems) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${_cuenta!.cantidadItems} unidad${_cuenta!.cantidadItems != 1 ? 'es' : ''}',
+                  style: TextStyle(
+                      color: Colors.grey.shade500, fontSize: 13),
+                ),
+                Text(
+                  '${_cuenta!.items.length} concepto${_cuenta!.items.length != 1 ? 's' : ''}',
+                  style: TextStyle(
+                      color: Colors.grey.shade500, fontSize: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+          ],
+          // Total + botón
+          Row(
+            children: [
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('TOTAL', style: textTheme.labelMedium?.copyWith(color: AppTheme.textSecondary)),
-                  Text(_fmt.format(_cuenta!.total), style: textTheme.displaySmall),
+                  const Text('TOTAL',
+                      style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1)),
+                  Text(
+                    _fmt.format(_cuenta!.total),
+                    style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A2E),
+                        height: 1.1),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              const SizedBox(width: 16),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          hayItems ? primaryDark : Colors.grey.shade300,
+                      foregroundColor: Colors.white,
+                      elevation: hayItems ? 3 : 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: (_cobrando || !hayItems) ? null : _cobrar,
+                    child: _cobrando
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2.5))
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.payments_outlined, size: 20),
+                              SizedBox(width: 8),
+                              Text('Cobrar',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                  ),
+                ),
               ),
-              onPressed: (_cobrando || !hayItems) ? null : _cobrar,
-              icon: _cobrando
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.payments_outlined),
-              label: const Text('Cobrar'),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildEmptyState(TextTheme textTheme) {
+  // ── Empty state ───────────────────────────────────────────────────────────
+  Widget _emptyState() {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.add_shopping_cart_outlined, size: 72, color: AppTheme.textSecondary),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: primaryDark.withOpacity(0.07),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.add_shopping_cart_outlined,
+                size: 36, color: primaryDark),
+          ),
           const SizedBox(height: 16),
-          Text('Cuenta vacía', style: textTheme.headlineSmall?.copyWith(color: AppTheme.textSecondary)),
+          const Text('Cuenta vacía',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A2E))),
           const SizedBox(height: 8),
-          const Text('Toca "Agregar" para añadir productos', style: TextStyle(color: Colors.grey)),
+          Text('Toca "Agregar" para añadir productos',
+              style: TextStyle(
+                  color: Colors.grey.shade500, fontSize: 13)),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryDark,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('Agregar producto',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: _mostrarSelector,
+          ),
         ],
       ),
     );
   }
 }
 
-class _ProductGridSheet extends StatefulWidget {
+// ═════════════════════════════════════════════════════════════════════════════
+// Sheet selector de productos
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _ProductoSheet extends StatefulWidget {
   final List<Map<String, dynamic>> productos;
   final Future<void> Function(Map<String, dynamic>, double) onAgregar;
 
-  const _ProductGridSheet({required this.productos, required this.onAgregar});
+  const _ProductoSheet({required this.productos, required this.onAgregar});
 
   @override
-  State<_ProductGridSheet> createState() => _ProductGridSheetState();
+  State<_ProductoSheet> createState() => _ProductoSheetState();
 }
 
-class _ProductGridSheetState extends State<_ProductGridSheet> {
+class _ProductoSheetState extends State<_ProductoSheet> {
+  static const Color primaryDark = Color(0xFF084B53);
+
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _filtrados = [];
   final Set<int> _agregando = {};
 
+  final _fmt =
+      NumberFormat.currency(symbol: '\$', decimalDigits: 0, locale: 'es_MX');
+
   @override
   void initState() {
     super.initState();
-    _filtrados = widget.productos.where((p) => (p['stockActual'] as num) > 0).toList();
-    _searchCtrl.addListener(() => _filtrar(_searchCtrl.text));
+    _filtrados = widget.productos
+        .where((p) => (p['stockActual'] as num).toDouble() > 0)
+        .toList();
   }
 
   @override
@@ -291,9 +630,14 @@ class _ProductGridSheetState extends State<_ProductGridSheet> {
 
   void _filtrar(String q) {
     setState(() {
-      _filtrados = widget.productos.where((p) =>
-              (p['stockActual'] as num) > 0 &&
-              p['nombre'].toString().toLowerCase().contains(q.toLowerCase())).toList();
+      _filtrados = widget.productos
+          .where((p) =>
+              (p['stockActual'] as num).toDouble() > 0 &&
+              p['nombre']
+                  .toString()
+                  .toLowerCase()
+                  .contains(q.toLowerCase()))
+          .toList();
     });
   }
 
@@ -301,82 +645,161 @@ class _ProductGridSheetState extends State<_ProductGridSheet> {
     final id = p['id'] as int;
     setState(() => _agregando.add(id));
     await widget.onAgregar(p, 1);
-    if (mounted) {
-      setState(() => _agregando.remove(id));
-    }
+    if (!mounted) return;
+    setState(() => _agregando.remove(id));
   }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.background,
+        color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('Agregar Producto', style: textTheme.titleLarge),
+          // Handle
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
           ),
+
+          // Título
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('Agregar producto',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    color: Color(0xFF1A1A2E))),
+          ),
+
+          // Buscador
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: TextField(
               controller: _searchCtrl,
               autofocus: true,
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
-                prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+                prefixIcon: const Icon(Icons.search, size: 20),
                 filled: true,
-                fillColor: AppTheme.cardColor,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                fillColor: const Color(0xFFF4F6F8),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
+              onChanged: _filtrar,
             ),
           ),
+
+          // Lista
           Expanded(
             child: _filtrados.isEmpty
-                ? Center(child: Text('No hay productos con stock', style: textTheme.bodyMedium))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.9,
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inventory_2_outlined,
+                            size: 48, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text('Sin productos con stock',
+                            style: TextStyle(color: Colors.grey.shade400)),
+                      ],
                     ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: _filtrados.length,
                     itemBuilder: (_, i) {
                       final p = _filtrados[i];
-                      final cargando = _agregando.contains(p['id']);
-                      return Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: cargando ? null : () => _onAgregar(p),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Container(
-                                height: 80,
-                                color: AppTheme.primary.withOpacity(0.1),
-                                child: cargando
-                                  ? const Center(child: CircularProgressIndicator())
-                                  : const Icon(Icons.fastfood_outlined, color: AppTheme.primary, size: 40),
+                      final id = p['id'] as int;
+                      final stock = (p['stockActual'] as num).toDouble();
+                      final precio = (p['precioVenta'] as num).toDouble();
+                      final cargando = _agregando.contains(id);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF4F6F8),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 4),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: primaryDark.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                p['nombre']
+                                    .toString()
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                    color: primaryDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(p['nombre'], style: textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                    const SizedBox(height: 4),
-                                    Text('\$${p['precioVenta']}', style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                                  ],
+                            ),
+                          ),
+                          title: Text(p['nombre'],
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: Color(0xFF1A1A2E))),
+                          subtitle: Text(
+                            'Stock: ${stock.toStringAsFixed(0)}',
+                            style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 12),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _fmt.format(precio),
+                                style: const TextStyle(
+                                    color: primaryDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14),
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                onTap: cargando ? null : () => _onAgregar(p),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: cargando
+                                        ? Colors.grey.shade300
+                                        : primaryDark,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: cargando
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(8),
+                                          child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.add,
+                                          color: Colors.white, size: 20),
                                 ),
                               ),
                             ],
@@ -392,65 +815,166 @@ class _ProductGridSheetState extends State<_ProductGridSheet> {
   }
 }
 
-class _TicketCobroSheet extends StatelessWidget {
+// ═════════════════════════════════════════════════════════════════════════════
+// Sheet de confirmación / ticket de cobro
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _TicketCobro extends StatelessWidget {
   final CuentaAbierta cuenta;
   final NumberFormat fmt;
 
-  const _TicketCobroSheet({required this.cuenta, required this.fmt});
+  const _TicketCobro({required this.cuenta, required this.fmt});
+
+  static const Color primaryDark = Color(0xFF084B53);
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.background,
+        color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+          24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-          Text('Cobrar Cuenta', style: textTheme.headlineSmall),
-          Text(cuenta.nombre, style: textTheme.bodyLarge?.copyWith(color: AppTheme.textSecondary)),
-          const SizedBox(height: 20),
-          const Divider(height: 20),
-          ...cuenta.items.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(
-              children: [
-                Text('${item.cantidad.toStringAsFixed(0)}x', style: textTheme.bodyMedium?.copyWith(color: AppTheme.textSecondary)),
-                const SizedBox(width: 10),
-                Expanded(child: Text(item.nombre, style: textTheme.bodyLarge)),
-                Text(fmt.format(item.subtotal), style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-              ],
+          // Handle
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+
+          // Ícono
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: primaryDark.withOpacity(0.08),
+              shape: BoxShape.circle,
             ),
-          )),
-          const Divider(height: 20),
+            child: const Icon(Icons.receipt_long,
+                color: primaryDark, size: 28),
+          ),
+          const SizedBox(height: 12),
+
+          const Text('Cobrar cuenta',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A2E))),
+          const SizedBox(height: 4),
+          Text(cuenta.nombre,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 8),
+
+          // Items
+          ...cuenta.items.map((item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: primaryDark.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text(
+                          item.cantidad.toStringAsFixed(0),
+                          style: const TextStyle(
+                              color: primaryDark,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(item.nombre,
+                          style: const TextStyle(fontSize: 14)),
+                    ),
+                    Text(fmt.format(item.subtotal),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14)),
+                  ],
+                ),
+              )),
+
+          const SizedBox(height: 8),
+          const Divider(),
+          const SizedBox(height: 10),
+
+          // Total
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('TOTAL', style: textTheme.titleLarge),
-              Text(fmt.format(cuenta.total), style: textTheme.displaySmall?.copyWith(color: AppTheme.accent)),
+              const Text('TOTAL',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                      letterSpacing: 1)),
+              Text(
+                fmt.format(cuenta.total),
+                style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: primaryDark),
+              ),
             ],
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 20),
+
+          // Botones
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey.shade600,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancelar',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 2,
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryDark,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 3,
+                  ),
                   onPressed: () => Navigator.pop(context, true),
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Confirmar Cobro'),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 20),
+                      SizedBox(width: 8),
+                      Text('Confirmar cobro',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
                 ),
               ),
             ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:pos_caja/app_theme.dart';
 import 'services/license_service.dart';
 import 'services/db_helper_admin.dart';
 import 'services/db_helper_cajero.dart';
@@ -54,7 +53,6 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _onActivada() async {
     final modo = await LicenseService.obtenerModoActual();
-    if (!mounted) return;
     if (modo == ModoApp.admin) {
       await DBHelperAdmin.instance.database;
     } else if (modo == ModoApp.cajero) {
@@ -87,7 +85,13 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'VaraNova',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: ThemeData(
+        useMaterial3: true,
+        primaryColor: const Color(0xFF084B53),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF084B53),
+        ),
+      ),
       home: _getHomeScreen(),
     );
   }
