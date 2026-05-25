@@ -137,6 +137,17 @@ class DBHelperAdmin {
     );
   }
 
+  Future<bool> existeProducto(int id) async {
+    final db = await database;
+    final res = await db.query(
+      'productos',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return res.isNotEmpty;
+  }
+
   // ─── MOVIMIENTOS ───────────────────────────────────────────────────────────
 
   Future<void> insertarMovimiento(Movimiento movimiento) async {
@@ -256,15 +267,23 @@ class DBHelperAdmin {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
 
-        // Registrar el movimiento de salida de stock en el admin
-        final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        await txn.insert('movimientos', {
-          'producto_id': prodId,
-          'cantidad':    -cantidad,
-          'fecha':       hoy,
-          'tipo':        'venta_cajero',
-          'nota':        'Cierre importado: $nombreArchivo',
-        });
+        // Registrar movimiento SOLO si el producto existe en admin
+        final productoExiste = await txn.query(
+          'productos',
+          where: 'id = ?',
+          whereArgs: [prodId],
+          limit: 1,
+        );
+        if (productoExiste.isNotEmpty) {
+          final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          await txn.insert('movimientos', {
+            'producto_id': prodId,
+            'cantidad':    -cantidad,
+            'fecha':       hoy,
+            'tipo':        'venta_cajero',
+            'nota':        'Cierre importado: $nombreArchivo',
+          });
+        }
       }
     });
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pos_caja/app_theme.dart';
 import '../../models/venta.dart';
 import '../../services/db_helper_cajero.dart';
 
@@ -13,8 +13,7 @@ class RealizarVentaScreen extends StatefulWidget {
 }
 
 class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
-  static const Color primaryDark = Color(0xFF084B53);
-  static const int maxProductosCarrito = 8;
+  static const int maxProductosCarrito = 10; // Aumentado a 10
 
   final Map<int, Map<String, dynamic>> _carrito = {};
   List<Map<String, dynamic>> _productos = [];
@@ -54,9 +53,7 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
     final id = p['id'] as int;
     final stock = (p['stockActual'] as num).toDouble();
 
-    // Verificar límite de productos distintos
-    if (!_carrito.containsKey(id) &&
-        _carrito.length >= maxProductosCarrito) {
+    if (!_carrito.containsKey(id) && _carrito.length >= maxProductosCarrito) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Máximo $maxProductosCarrito productos distintos por venta.'),
@@ -99,72 +96,6 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
     });
   }
 
-  void _editarCantidadManual(Map<String, dynamic> p) {
-    final id = p['id'] as int;
-    final stock = (p['stockActual'] as num).toDouble();
-    final cantActual = _carrito[id]?['cantidad'] ?? 0.0;
-    final controller = TextEditingController(
-        text: cantActual > 0 ? (cantActual as double).toStringAsFixed(0) : '');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(p['nombre']),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Stock disponible: ${stock.toStringAsFixed(0)}',
-                style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Cantidad',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
-            onPressed: () {
-              final nueva = double.tryParse(controller.text);
-              if (nueva == null || nueva <= 0) {
-                Navigator.pop(context);
-                return;
-              }
-              if (nueva > stock) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cantidad supera el stock')),
-                );
-                return;
-              }
-              setState(() {
-                _carrito[id] = {
-                  'id': id,
-                  'nombre': p['nombre'],
-                  'precio': p['precioVenta'],
-                  'cantidad': nueva,
-                  'stock': stock,
-                };
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _confirmarVenta() async {
     if (_carrito.isEmpty) return;
 
@@ -172,7 +103,6 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
     if (turnoCerrado) {
       if (!mounted) return;
       setState(() => _turnoCerrado = true);
-      _mostrarBloqueo();
       return;
     }
 
@@ -204,245 +134,201 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
 
     Navigator.pop(context, true);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-              'Venta \$${_formatPrecio(totalVenta)} registrada ✓')),
-    );
-  }
-
-  void _mostrarBloqueo() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_clock, color: Colors.orange, size: 28),
-            SizedBox(width: 10),
-            Text('Turno cerrado'),
-          ],
-        ),
-        content: const Text(
-          'El turno ya fue cerrado.\n\n'
-          'No se pueden registrar más ventas hasta que el Admin inicie un nuevo día.',
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Entendido'),
-          ),
-        ],
-      ),
+      SnackBar(content: Text('Venta \$${_formatPrecio(totalVenta)} registrada ✓')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = _carrito.values
-        .fold<double>(0, (s, i) => s + i['precio'] * i['cantidad']);
+    final textTheme = Theme.of(context).textTheme;
 
     if (_turnoCerrado) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Nueva Venta'),
-          backgroundColor: primaryDark,
-          foregroundColor: Colors.white,
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.lock_clock,
-                      color: Colors.orange, size: 56),
-                ),
-                const SizedBox(height: 24),
-                const Text('Turno cerrado',
-                    style: TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                const Text(
-                  'El cierre de caja ya fue exportado.\nNo se pueden registrar más ventas hasta que el Admin inicie un nuevo día.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.grey, fontSize: 14, height: 1.5),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryDark,
-                      side: const BorderSide(color: primaryDark),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Volver',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      return _buildTurnoCerradoScaffold(context);
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nueva Venta'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
+        title: const Text('Nueva Venta Rápida'),
       ),
       body: Column(
         children: [
-          // Banner límite carrito
-          if (_carrito.length >= maxProductosCarrito)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.shade50,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Text(
-                'Límite de $maxProductosCarrito productos distintos alcanzado.',
-                style: TextStyle(color: Colors.orange, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _productos.length,
-              itemBuilder: (context, index) {
-                final p = _productos[index];
-                final id = p['id'] as int;
-                final enCarrito = _carrito[id]?['cantidad'] ?? 0;
-                final precio = (p['precioVenta'] as num);
-
-                return ListTile(
-                  title: Text(p['nombre']),
-                  subtitle: Text(
-                      'Stock: ${(p['stockActual'] as num).toStringAsFixed(0)} — \$${_formatPrecio(precio)}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (enCarrito > 0) ...[
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline,
-                              color: Colors.red),
-                          onPressed: () => _quitarDelCarrito(id),
-                        ),
-                        GestureDetector(
-                          onTap: () => _editarCantidadManual(p),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: primaryDark),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              (enCarrito as double).toStringAsFixed(0),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                      IconButton(
-                        icon: const Icon(Icons.add_circle,
-                            color: primaryDark),
-                        onPressed: () => _agregarAlCarrito(p),
-                      ),
-                    ],
+            child: _productos.isEmpty
+                ? const Center(child: Text('No hay productos con stock.'))
+                : GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.9, 
+                    ),
+                    itemCount: _productos.length,
+                    itemBuilder: (context, index) {
+                      final p = _productos[index];
+                      return _buildProductCard(p, textTheme);
+                    },
                   ),
-                );
-              },
-            ),
           ),
-          if (_carrito.isNotEmpty)
+          _buildCarritoSheet(textTheme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> p, TextTheme textTheme) {
+    final enCarrito = _carrito[p['id']]?['cantidad'] ?? 0;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _agregarAlCarrito(p),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Placeholder de imagen
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.grey.shade100,
+              height: 80,
+              color: AppTheme.primary.withOpacity(0.1),
+              child: const Icon(Icons.fastfood_outlined, color: AppTheme.primary, size: 40),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                      '${_carrito.length}/$maxProductosCarrito producto(s) en carrito',
-                      style: const TextStyle(color: Colors.grey)),
-                  ..._carrito.values.map((item) => Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(item['nombre']),
-                          Text(
-                              'x${(item['cantidad'] as double).toStringAsFixed(0)}  \$${_formatPrecio((item['precio'] * item['cantidad']) as num)}'),
-                        ],
-                      )),
+                    p['nombre'],
+                    style: textTheme.titleSmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '\$${_formatPrecio(p['precioVenta'] as num)}',
+                    style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: AppTheme.primary),
+                  ),
                 ],
               ),
             ),
-          Container(
-            padding: const EdgeInsets.all(20),
-            color: Colors.grey[100],
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('ITEMS: ${_carrito.length}',
-                        style:
-                            const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('TOTAL: \$${_formatPrecio(total)}',
-                        style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green)),
-                  ],
+            if (enCarrito > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                color: AppTheme.accent,
+                child: Text(
+                  'x${(enCarrito as double).toStringAsFixed(0)} en carrito',
+                  style: textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryDark,
-                        foregroundColor: Colors.white),
-                    onPressed: _cargando || _carrito.isEmpty
-                        ? null
-                        : _confirmarVenta,
-                    child: _cargando
-                        ? const CircularProgressIndicator(
-                            color: Colors.white)
-                        : const Text('CONFIRMAR VENTA'),
+              )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarritoSheet(TextTheme textTheme) {
+    final total = _carrito.values.fold<double>(0, (s, i) => s + i['precio'] * i['cantidad']);
+
+    return Material(
+      elevation: 8,
+      child: Container(
+        padding: const EdgeInsets.all(16.0),
+        decoration: const BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_carrito.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16.0),
+                child: Text('Selecciona productos para agregarlos al carrito'),
+              )
+            else
+              ..._carrito.values.map((item) {
+                return ListTile(
+                  dense: true,
+                  title: Text(item['nombre'], style: textTheme.bodyMedium),
+                  subtitle: Text('${(item['cantidad'] as double).toStringAsFixed(0)} x \$${_formatPrecio(item['precio'] as num)}'),
+                  trailing: Text(
+                    '\$${_formatPrecio(item['precio'] * item['cantidad'] as num)}',
+                    style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
-                ),
+                  leading: IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                    onPressed: () => _quitarDelCarrito(item['id'] as int),
+                  ),
+                );
+              }),
+            const Divider(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('TOTAL:', style: textTheme.titleLarge),
+                Text('\$${_formatPrecio(total)}', style: textTheme.titleLarge?.copyWith(color: AppTheme.accent, fontWeight: FontWeight.bold)),
               ],
             ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _cargando || _carrito.isEmpty ? null : _confirmarVenta,
+                child: _cargando
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white))
+                    : const Text('CONFIRMAR VENTA'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTurnoCerradoScaffold(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Turno Cerrado'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_clock, color: Colors.orange, size: 56),
+              ),
+              const SizedBox(height: 24),
+              Text('Turno cerrado', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 12),
+              const Text(
+                'El cierre de caja ya fue exportado. No se pueden registrar más ventas hasta que el Admin inicie un nuevo día.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Volver', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

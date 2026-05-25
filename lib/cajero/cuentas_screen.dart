@@ -1,15 +1,6 @@
-// lib/vendedor/screens/cuentas_screen.dart
-//
-// Pantalla principal del modo restaurante/caja.
-// Reemplaza VentasScreen como tab 0 en VendedorScreen.
-//
-// Muestra la lista de cuentas abiertas y permite:
-//   • Crear nueva cuenta (pide nombre)
-//   • Entrar a una cuenta existente (agregar/quitar items, cobrar)
-//   • Cancelar una cuenta (devuelve stock)
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_caja/app_theme.dart';
 import '../../models/cuenta_abierta.dart';
 import '../../services/db_helper_cajero.dart';
 import 'cuenta_detalle_screen.dart';
@@ -22,8 +13,6 @@ class CuentasScreen extends StatefulWidget {
 }
 
 class CuentasScreenState extends State<CuentasScreen> {
-  static const Color primaryDark = Color(0xFF084B53);
-
   List<CuentaAbierta> _cuentas = [];
   bool _cargando = true;
   bool _turnoCerrado = false;
@@ -50,8 +39,6 @@ class CuentasScreenState extends State<CuentasScreen> {
       _cargando = false;
     });
   }
-
-  // ── Crear cuenta nueva ────────────────────────────────────────────────────
 
   Future<void> _nuevaCuenta() async {
     if (_turnoCerrado) {
@@ -81,8 +68,6 @@ class CuentasScreenState extends State<CuentasScreen> {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
             onPressed: () =>
                 Navigator.pop(context, controller.text.trim()),
             child: const Text('Crear'),
@@ -96,7 +81,6 @@ class CuentasScreenState extends State<CuentasScreen> {
     final cuenta = await DBHelperCajero.instance.crearCuenta(nombre);
     if (!mounted) return;
 
-    // Ir directo a la cuenta recién creada
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -105,8 +89,6 @@ class CuentasScreenState extends State<CuentasScreen> {
     );
     cargar();
   }
-
-  // ── Abrir cuenta existente ────────────────────────────────────────────────
 
   Future<void> _abrirCuenta(CuentaAbierta cuenta) async {
     await Navigator.push(
@@ -117,8 +99,6 @@ class CuentasScreenState extends State<CuentasScreen> {
     );
     cargar();
   }
-
-  // ── Cancelar cuenta ───────────────────────────────────────────────────────
 
   Future<void> _cancelarCuenta(CuentaAbierta cuenta) async {
     final confirmar = await showDialog<bool>(
@@ -168,8 +148,6 @@ class CuentasScreenState extends State<CuentasScreen> {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context),
             child: const Text('Entendido'),
           ),
@@ -178,15 +156,11 @@ class CuentasScreenState extends State<CuentasScreen> {
     );
   }
 
-  // ── UI ────────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cuentas'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -198,7 +172,6 @@ class CuentasScreenState extends State<CuentasScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Banner turno cerrado
                 if (_turnoCerrado)
                   Container(
                     width: double.infinity,
@@ -218,8 +191,6 @@ class CuentasScreenState extends State<CuentasScreen> {
                       ],
                     ),
                   ),
-
-                // Lista de cuentas
                 Expanded(
                   child: _cuentas.isEmpty
                       ? _emptyState()
@@ -237,7 +208,7 @@ class CuentasScreenState extends State<CuentasScreen> {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _nuevaCuenta,
-        backgroundColor: _turnoCerrado ? Colors.grey : primaryDark,
+        backgroundColor: _turnoCerrado ? Colors.grey : AppTheme.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Nueva cuenta'),
@@ -253,17 +224,14 @@ class CuentasScreenState extends State<CuentasScreen> {
           Icon(Icons.receipt_long_outlined,
               size: 72, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Sin cuentas abiertas',
-            style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.grey),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Toca "+ Nueva cuenta" para empezar',
-            style: TextStyle(color: Colors.grey),
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),
@@ -278,71 +246,55 @@ class CuentasScreenState extends State<CuentasScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade200),
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () => _abrirCuenta(cuenta),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Icono cuenta
               Container(
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: primaryDark.withOpacity(0.08),
+                  color: AppTheme.primary.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.receipt_outlined,
-                    color: primaryDark, size: 22),
+                    color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 14),
-
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       cuenta.nombre,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 3),
                     Text(
                       cuenta.items.isEmpty
                           ? 'Vacía — toca para agregar productos'
                           : '${cuenta.items.length} producto(s) · $tiempoStr abierta',
-                      style: TextStyle(
-                          color: Colors.grey.shade600, fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-
-              // Total + cancelar
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
                     _formatoMoneda.format(cuenta.total),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: primaryDark),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   GestureDetector(
                     onTap: () => _cancelarCuenta(cuenta),
                     child: Text(
                       'Cancelar',
-                      style: TextStyle(
-                          color: Colors.red.shade400, fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red.shade400),
                     ),
                   ),
                 ],

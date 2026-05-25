@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pos_caja/app_theme.dart';
 import '../models/producto.dart';
 import '../../../services/db_helper_admin.dart';
 import 'agregar_producto_screen.dart';
@@ -11,13 +12,11 @@ class InventarioScreen extends StatefulWidget {
 }
 
 class _InventarioScreenState extends State<InventarioScreen> {
-  static const Color primaryDark      = Color(0xFF084B53);
-  static const int   _limiteMaximo    = 150;
-  static const int   _limiteAdvertencia = 145;
+  static const int _limiteMaximo = 150;
+  static const int _limiteAdvertencia = 145;
 
   final TextEditingController _searchController = TextEditingController();
-
-  List<Map<String, dynamic>> _productos          = [];
+  List<Map<String, dynamic>> _productos = [];
   List<Map<String, dynamic>> _productosFiltrados = [];
   bool _cargando = true;
 
@@ -25,6 +24,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
   void initState() {
     super.initState();
     _cargarProductos();
+    _searchController.addListener(() {
+      _filtrar(_searchController.text);
+    });
   }
 
   @override
@@ -39,20 +41,17 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (!mounted) return;
     setState(() {
       _productos = data;
-      _productosFiltrados = _searchController.text.isEmpty
-          ? data
-          : _aplicarFiltro(data, _searchController.text);
+      _productosFiltrados = _aplicarFiltro(data, _searchController.text);
       _cargando = false;
     });
   }
 
-  List<Map<String, dynamic>> _aplicarFiltro(
-      List<Map<String, dynamic>> lista, String query) {
+  List<Map<String, dynamic>> _aplicarFiltro(List<Map<String, dynamic>> lista, String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return lista;
     return lista.where((p) {
       final porNombre = p['nombre'].toString().toLowerCase().contains(q);
-      final porId     = p['id'].toString() == q;
+      final porId = p['id'].toString() == q;
       return porNombre || porId;
     }).toList();
   }
@@ -70,102 +69,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
         builder: (_) => AgregarProductoScreen(producto: Producto.fromMap(item)),
       ),
     );
-    if (!mounted) return;
     _cargarProductos();
   }
 
   Future<void> _irAAgregar() async {
-    final total = _productos.length;
-
-    if (total >= _limiteMaximo) {
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.lock_outline, color: Colors.red, size: 26),
-              SizedBox(width: 10),
-              Text('Límite alcanzado',
-                  style: TextStyle(color: Colors.red, fontSize: 18)),
-            ],
-          ),
-          content: const Text(
-            'Has alcanzado el límite de 150 productos permitidos en esta versión.\n\n'
-            'Para gestionar más productos, contacta a VaraNova y obtén la versión Básica Plus.',
-            style: TextStyle(fontSize: 14, height: 1.5),
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey,
-                  side: const BorderSide(color: Colors.grey)),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      );
+    if (_productos.length >= _limiteMaximo) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Límite de productos alcanzado.')));
       return;
     }
-
-    if (total >= _limiteAdvertencia) {
-      final restantes = _limiteMaximo - total;
-      final continuar = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 26),
-              SizedBox(width: 10),
-              Text('Casi en el límite',
-                  style: TextStyle(color: Colors.orange, fontSize: 18)),
-            ],
-          ),
-          content: Text(
-            'Te ${restantes == 1 ? 'queda solo 1 producto disponible' : 'quedan $restantes productos disponibles'} '
-            'en esta versión (límite: $_limiteMaximo).\n\n'
-            '¿Deseas continuar?',
-            style: const TextStyle(fontSize: 14, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryDark,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8))),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Continuar'),
-            ),
-          ],
-        ),
-      );
-      if (continuar != true || !mounted) return;
-    }
-
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AgregarProductoScreen()),
     );
-    if (!mounted) return;
     _cargarProductos();
-  }
-
-  Future<void> _exportarInventario() async {
-    try {
-      await DBHelperAdmin.instance.exportarInventario();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al exportar: $e')),
-      );
-    }
   }
 
   Future<void> _confirmarEliminar(Map<String, dynamic> item) async {
@@ -175,13 +91,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
         title: const Text('Eliminar producto'),
         content: Text('¿Seguro que deseas eliminar "${item['nombre']}"?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             child: const Text('Eliminar'),
           ),
         ],
@@ -189,192 +102,155 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
     if (confirm != true) return;
     await DBHelperAdmin.instance.eliminarProducto(item['id'] as int);
-    if (!mounted) return;
     _cargarProductos();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inventario / Stock'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Actualizar',
-            onPressed: _cargarProductos,
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Exportar al cajero',
-            onPressed: _exportarInventario,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Inventario')),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Buscar por nombre o ID...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: _filtrar,
-            ),
-          ),
-          if (!_cargando) _buildBannerLimite(),
+          _buildHeader(),
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
                 : _productosFiltrados.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                size: 80, color: Colors.grey),
-                            SizedBox(height: 12),
-                            Text('Sin productos',
-                                style: TextStyle(color: Colors.grey)),
-                          ],
+                    ? _buildEmptyState()
+                    : RefreshIndicator(
+                        onRefresh: _cargarProductos,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: _productosFiltrados.length,
+                          itemBuilder: (context, index) {
+                            final item = _productosFiltrados[index];
+                            return _buildProductCard(item);
+                          },
                         ),
-                      )
-                    : ListView.builder(
-                        itemCount: _productosFiltrados.length,
-                        itemBuilder: (context, index) {
-                          final item = _productosFiltrados[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 5),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: primaryDark,
-                                    child: Text('${item['id']}',
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 12)),
-                                  ),
-                                  title: Text(item['nombre'],
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                  subtitle: Text(
-                                      'Stock: ${(item['stockActual'] as num).toStringAsFixed(0)}'),
-                                  trailing: Text(
-                                      '\$${(item['precioVenta'] as num).toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16)),
-                                  onTap: () => _irAEditar(item),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text('Editar'),
-                                      onPressed: () => _irAEditar(item),
-                                    ),
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.delete,
-                                          size: 16, color: Colors.red),
-                                      label: const Text('Eliminar',
-                                          style: TextStyle(color: Colors.red)),
-                                      onPressed: () =>
-                                          _confirmarEliminar(item),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _irAAgregar,
-        backgroundColor:
-            _productos.length >= _limiteMaximo ? Colors.grey : primaryDark,
-        child: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Nuevo Producto'),
+        icon: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre o ID...',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: AppTheme.cardColor,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildBannerLimite(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> item) {
+    final textTheme = Theme.of(context).textTheme;
+    final stock = (item['stockActual'] as num).toDouble();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          child: Text('${item['id']}'),
+        ),
+        title: Text(item['nombre'], style: textTheme.titleMedium),
+        subtitle: Text('\$${(item['precioVenta'] as num).toStringAsFixed(2)}', style: textTheme.bodyLarge?.copyWith(color: AppTheme.accent)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildStockIndicator(stock),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') {
+                  _irAEditar(item);
+                } else if (value == 'delete') {
+                  _confirmarEliminar(item);
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(value: 'edit', child: Text('Editar')),
+                const PopupMenuItem<String>(value: 'delete', child: Text('Eliminar')),
+              ],
+            ),
+          ],
+        ),
+        onTap: () => _irAEditar(item),
+      ),
+    );
+  }
+  
+  Widget _buildStockIndicator(double stock) {
+    Color color;
+    if (stock <= 0) {
+      color = Colors.red;
+    } else if (stock <= 10) {
+      color = Colors.orange;
+    } else {
+      color = Colors.green;
+    }
+    return Chip(
+      backgroundColor: color.withOpacity(0.15),
+      side: BorderSide.none,
+      label: Text(
+        'Stock: ${stock.toStringAsFixed(0)}',
+        style: TextStyle(color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
 
   Widget _buildBannerLimite() {
     final total = _productos.length;
+    Color color = AppTheme.textSecondary;
+    String text = '$total / $_limiteMaximo productos';
 
     if (total >= _limiteMaximo) {
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.red.shade200),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.lock_outline, color: Colors.red, size: 18),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Límite de 150 productos alcanzado. Contacta a VaraNova para la versión Básica Plus.',
-                style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      );
+      color = Colors.red;
+      text = 'Límite alcanzado: $total / $_limiteMaximo';
+    } else if (total >= _limiteAdvertencia) {
+      color = Colors.orange;
+      text = 'Casi en el límite: $total / $_limiteMaximo';
     }
 
-    if (total >= _limiteAdvertencia) {
-      final restantes = _limiteMaximo - total;
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.orange.shade200),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.orange, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Casi en el límite: $total/150 productos. '
-                '${restantes == 1 ? 'Solo queda 1 lugar.' : 'Quedan $restantes lugares.'}',
-                style: const TextStyle(
-                    color: Colors.orange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Chip(
+        label: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+        backgroundColor: color.withOpacity(0.1),
+        side: BorderSide.none,
+      ),
+    );
+  }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-      child: Text(
-        '$total / $_limiteMaximo productos',
-        style: const TextStyle(color: Colors.grey, fontSize: 12),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.inventory_2_outlined, size: 70, color: AppTheme.textSecondary),
+          const SizedBox(height: 16),
+          Text('No hay productos', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textSecondary)),
+          const SizedBox(height: 8),
+          const Text('Toca "+ Nuevo Producto" para empezar', textAlign: TextAlign.center),
+        ],
       ),
     );
   }

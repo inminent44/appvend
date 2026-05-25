@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_caja/app_theme.dart';
 import '../services/db_helper_cajero.dart';
 import '../services/license_service.dart';
 
@@ -14,8 +15,6 @@ class ConfiguracionScreen extends StatefulWidget {
 }
 
 class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
-  static const Color primaryDark = Color(0xFF084B53);
-
   String _codigoDispositivo = '';
   bool _cargando = true;
   bool _turnoCerrado = false;
@@ -81,232 +80,33 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuración'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
       ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Turno actual ────────────────────────────────────────
-                  _seccionLabel('Turno actual'),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: _turnoCerrado
-                          ? Colors.orange.shade50
-                          : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _turnoCerrado
-                            ? Colors.orange.shade200
-                            : Colors.green.shade200,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _turnoCerrado
-                              ? Icons.lock_clock
-                              : Icons.lock_open_outlined,
-                          color: _turnoCerrado ? Colors.orange : Colors.green,
-                          size: 32,
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _turnoCerrado ? 'Turno cerrado' : 'Turno abierto',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: _turnoCerrado
-                                    ? Colors.orange
-                                    : Colors.green,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Fecha: $_fechaTurno',
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildSectionTitle('Turno actual', textTheme),
+                  _buildTurnoCard(textTheme),
+                  const SizedBox(height: 24),
 
-                  const SizedBox(height: 28),
+                  _buildSectionTitle('Inventario', textTheme),
+                  _buildInventarioCard(textTheme),
+                  const SizedBox(height: 24),
 
-                  // ── Inventario ──────────────────────────────────────────
-                  _seccionLabel('Inventario'),
-                  const SizedBox(height: 12),
-                  _tarjeta(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                color: primaryDark, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'Importar inventario del Admin',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: primaryDark,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Carga el archivo .gv enviado por el administrador para actualizar productos y precios.',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _importando ? null : _importarInventario,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryDark,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: _importando
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.upload_file, size: 18),
-                            label: Text(_importando
-                                ? 'Importando…'
-                                : 'Seleccionar archivo'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildSectionTitle('Licencia', textTheme),
+                  _buildLicenciaCard(textTheme),
+                  const SizedBox(height: 24),
 
-                  const SizedBox(height: 28),
-
-                  // ── Licencia / Dispositivo ──────────────────────────────
-                  _seccionLabel('Licencia'),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.blue.shade100),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.smartphone_outlined,
-                                color: Colors.blue, size: 18),
-                            SizedBox(width: 6),
-                            Text(
-                              'Código de este equipo',
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SelectableText(
-                          _codigoDispositivo,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                            letterSpacing: 3,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _copiarCodigo,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.blue,
-                              side: const BorderSide(color: Colors.blue),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.copy, size: 16),
-                            label: const Text('Copiar código'),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'Comparte este código con el Admin para generar o renovar tu licencia.',
-                          style:
-                              TextStyle(color: Colors.blueGrey, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  // ── Acerca de ───────────────────────────────────────────
-                  _seccionLabel('Acerca de'),
-                  const SizedBox(height: 12),
-                  _tarjeta(
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.shopping_cart_outlined,
-                                color: primaryDark, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'VaraNova Vendedor',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: primaryDark,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Versión 1.0.0',
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'App de ventas simplificada. Toda la gestión del negocio se realiza desde la app Admin.',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-
+                  _buildSectionTitle('Acerca de', textTheme),
+                  _buildAcercaDeCard(textTheme),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -314,30 +114,167 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
     );
   }
 
-  // ── Helpers de UI ─────────────────────────────────────────────────────────
-
-  Widget _seccionLabel(String texto) {
-    return Text(
-      texto.toUpperCase(),
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        color: Colors.grey,
-        letterSpacing: 0.9,
+  Widget _buildSectionTitle(String title, TextTheme textTheme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+      child: Text(
+        title.toUpperCase(),
+        style: textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary, letterSpacing: 0.9),
       ),
     );
   }
 
-  Widget _tarjeta({required Widget child}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+  Widget _buildTurnoCard(TextTheme textTheme) {
+    final turnoColor = _turnoCerrado ? Colors.orange : Colors.green;
+    return Card(
+      color: turnoColor.withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(
+              _turnoCerrado ? Icons.lock_clock : Icons.lock_open_outlined,
+              color: turnoColor,
+              size: 32,
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _turnoCerrado ? 'Turno cerrado' : 'Turno abierto',
+                  style: textTheme.titleMedium?.copyWith(color: turnoColor, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Fecha: $_fechaTurno',
+                  style: textTheme.bodyMedium?.copyWith(color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: child,
+    );
+  }
+
+  Widget _buildInventarioCard(TextTheme textTheme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined, color: AppTheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Importar inventario del Admin',
+                  style: textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Carga el archivo .gv enviado por el administrador para actualizar productos y precios.',
+              style: textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _importando ? null : _importarInventario,
+                icon: _importando
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file, size: 18),
+                label: Text(_importando ? 'Importando…' : 'Seleccionar archivo'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLicenciaCard(TextTheme textTheme) {
+    return Card(
+      color: AppTheme.primary.withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.smartphone_outlined, color: AppTheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Código de este equipo',
+                  style: textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SelectableText(
+              _codigoDispositivo,
+              style: textTheme.headlineSmall?.copyWith(color: AppTheme.primary, letterSpacing: 2, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _copiarCodigo,
+                style: OutlinedButton.styleFrom(side: BorderSide(color: AppTheme.primary.withOpacity(0.5))),
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Copiar código'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Comparte este código con el Admin para generar o renovar tu licencia.',
+              style: textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAcercaDeCard(TextTheme textTheme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.shopping_cart_outlined, color: AppTheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'VaraNova Vendedor',
+                  style: textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Versión 1.0.0',
+              style: textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'App de ventas simplificada. Toda la gestión del negocio se realiza desde la app Admin.',
+              style: textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

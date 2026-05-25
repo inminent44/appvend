@@ -1,75 +1,62 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:pos_caja/app_theme.dart';
 import '../../services/db_helper_admin.dart';
 import '../auth_service.dart';
 
 class BackupScreen extends StatelessWidget {
   const BackupScreen({super.key});
 
-  static const Color primaryDark = Color(0xFF084B53);
-
   Future<void> _exportarBackup(BuildContext context) async {
     try {
       final ruta = await DBHelperAdmin.instance.exportarBackup();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Backup guardado en:\n$ruta')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backup guardado en: \n$ruta')),
+        );
+      }
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al exportar backup: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al exportar: $e')),
+        );
+      }
     }
   }
 
   Future<void> _restaurarBackup(BuildContext context) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Restaurar Backup'),
-        content: const Text(
-          '⚠️ Esta acción reemplazará TODOS los datos actuales con los del backup.\n\n'
-          '¿Estás seguro?',
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Restaurar'),
-          ),
-        ],
-      ),
+    final confirmar = await _showConfirmationDialog(
+      context,
+      title: 'Restaurar Backup',
+      content: 'Esta acción reemplazará TODOS los datos actuales. ¿Estás seguro?',
+      confirmText: 'Restaurar',
     );
     if (confirmar != true) return;
 
-    final result = await FilePicker.platform.pickFiles();
-    if (result == null) return;
-    final path = result.files.single.path;
-    if (path == null) return;
+    final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['db']);
+    if (result == null || result.files.single.path == null) return;
 
     try {
-      await DBHelperAdmin.instance.restaurarBackup(File(path));
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Backup restaurado correctamente ✓')),
-      );
+      await DBHelperAdmin.instance.restaurarBackup(File(result.files.single.path!));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup restaurado correctamente ✓')),
+        );
+      }
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al restaurar: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al restaurar: $e')),
+        );
+      }
     }
   }
 
   Future<void> _cambiarPassword(BuildContext context) async {
-    final actualController    = TextEditingController();
-    final nuevoController     = TextEditingController();
+    final actualController = TextEditingController();
+    final nuevoController = TextEditingController();
     final confirmarController = TextEditingController();
 
     await showDialog(
@@ -79,73 +66,60 @@ class BackupScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller:  actualController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Contraseña actual',
-                  border: OutlineInputBorder()),
-            ),
+            TextField(controller: actualController, obscureText: true, decoration: const InputDecoration(labelText: 'Contraseña actual')),
             const SizedBox(height: 12),
-            TextField(
-              controller:  nuevoController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Nueva contraseña',
-                  border: OutlineInputBorder()),
-            ),
+            TextField(controller: nuevoController, obscureText: true, decoration: const InputDecoration(labelText: 'Nueva contraseña')),
             const SizedBox(height: 12),
-            TextField(
-              controller:  confirmarController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Confirmar nueva contraseña',
-                  border: OutlineInputBorder()),
-            ),
+            TextField(controller: confirmarController, obscureText: true, decoration: const InputDecoration(labelText: 'Confirmar nueva contraseña')),
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
             onPressed: () async {
               if (nuevoController.text != confirmarController.text) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Las contraseñas no coinciden')),
-                );
+                _showError(context, 'Las contraseñas no coinciden');
                 return;
               }
               if (nuevoController.text.length < 4) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mínimo 4 caracteres')),
-                );
+                _showError(context, 'Mínimo 4 caracteres');
                 return;
               }
-              final ok =
-                  await AuthService.instance.login(actualController.text);
+              final ok = await AuthService.instance.login(actualController.text);
               if (!context.mounted) return;
               if (!ok) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Contraseña actual incorrecta')),
-                );
+                 _showError(context, 'Contraseña actual incorrecta');
                 return;
               }
-              await AuthService.instance
-                  .actualizarPassword(nuevoController.text);
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content:
-                        Text('Contraseña actualizada correctamente ✓')),
-              );
+              await AuthService.instance.actualizarPassword(nuevoController.text);
+              if(context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contraseña actualizada ✓')));
+              }
             },
             child: const Text('GUARDAR'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+  }
+
+  Future<bool?> _showConfirmationDialog(BuildContext context, {required String title, required String content, required String confirmText}) {
+     return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: Text(confirmText),
           ),
         ],
       ),
@@ -155,86 +129,86 @@ class BackupScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Backup / Restaurar'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
+      appBar: AppBar(title: const Text('Sistema')),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          _buildSectionCard(
+            context: context,
+            icon: Icons.security_outlined,
+            title: 'Seguridad',
+            content: 'Gestiona la seguridad de tu cuenta de administrador.',
+            actions: [
+              _buildActionButton(
+                context,
+                icon: Icons.lock_reset_outlined,
+                label: 'Cambiar Contraseña',
+                onTap: () => _cambiarPassword(context),
+              ),
+            ],
+          ),
+          _buildSectionCard(
+            context: context,
+            icon: Icons.storage_outlined,
+            title: 'Base de Datos',
+            content: 'Crea copias de seguridad de todos tus datos o restaura a partir de un archivo.',
+            actions: [
+              _buildActionButton(
+                context,
+                icon: Icons.backup_outlined,
+                label: 'Exportar Backup (.db)',
+                onTap: () => _exportarBackup(context),
+              ),
+              const SizedBox(height: 12),
+               _buildActionButton(
+                context,
+                icon: Icons.restore_page_outlined,
+                label: 'Restaurar desde Backup',
+                onTap: () => _restaurarBackup(context),
+                isDestructive: true,
+              ),
+            ],
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+    );
+  }
+
+  Widget _buildSectionCard({required BuildContext context, required IconData icon, required String title, required String content, required List<Widget> actions}) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.cloud_sync_outlined,
-                size: 90, color: primaryDark),
-            const SizedBox(height: 16),
-            const Text(
-              'Respalda o restaura todos los datos del negocio',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 15),
+            Row(
+              children: [
+                Icon(icon, size: 30, color: AppTheme.primary),
+                const SizedBox(width: 12),
+                Text(title, style: textTheme.headlineSmall?.copyWith(color: AppTheme.primary)),
+              ],
             ),
-            const SizedBox(height: 48),
-            _buildBoton(
-              context,
-              icon:     Icons.lock_reset,
-              label:    'CAMBIAR CONTRASEÑA',
-              subtitle: 'Actualiza tu contraseña de acceso',
-              color:    primaryDark,
-              onTap:    () => _cambiarPassword(context),
-            ),
-            const SizedBox(height: 16),
-            _buildBoton(
-              context,
-              icon:     Icons.backup_outlined,
-              label:    'EXPORTAR BACKUP',
-              subtitle: 'Guarda una copia de todos los datos',
-              color:    primaryDark,
-              onTap:    () => _exportarBackup(context),
-            ),
-            const SizedBox(height: 16),
-            _buildBoton(
-              context,
-              icon:     Icons.restore,
-              label:    'RESTAURAR BACKUP',
-              subtitle: 'Reemplaza los datos con una copia guardada',
-              color:    Colors.red.shade700,
-              onTap:    () => _restaurarBackup(context),
-            ),
+            const Divider(height: 24),
+            Text(content, style: textTheme.bodyLarge),
+            const SizedBox(height: 20),
+            ...actions,
           ],
         ),
       ),
     );
   }
-
-  Widget _buildBoton(
-    BuildContext context, {
-    required IconData    icon,
-    required String      label,
-    required String      subtitle,
-    required Color       color,
-    required VoidCallback onTap,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onTap,
-        icon:      Icon(icon),
-        label: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(subtitle,
-                style:
-                    const TextStyle(fontSize: 11, color: Colors.white70)),
-          ],
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          alignment: Alignment.centerLeft,
-        ),
+  
+  Widget _buildActionButton(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap, bool isDestructive = false}) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isDestructive ? Colors.red.shade700 : AppTheme.primary,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(double.infinity, 50),
       ),
     );
   }
