@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'services/license_service.dart';
 import 'services/db_helper.dart';
 import 'screens/activacion_screen.dart';
@@ -6,6 +7,7 @@ import 'screens/vendedor_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es_MX', null);
   await DBHelper.instance.database;
 
   final nivel = await LicenseService.obtenerNivelActual();

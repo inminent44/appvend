@@ -92,15 +92,19 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
   }
 
   Future<void> _sumarItem(ItemCuenta item) async {
-    await _agregarProducto(
-      {
-        'id': item.productoId,
-        'nombre': item.nombre,
-        'precioVenta': item.precio,
-        'stockActual': 999,
-      },
-      1,
+    // Buscar el producto real para respetar el stock actual
+    final prod = _productos.firstWhere(
+      (p) => p['id'] == item.productoId,
+      orElse: () => {},
     );
+    if (prod.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sin stock disponible'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    await _agregarProducto(prod, 1);
   }
 
   // ── Cobrar ────────────────────────────────────────────────────────────────

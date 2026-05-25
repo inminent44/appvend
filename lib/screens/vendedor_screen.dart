@@ -16,16 +16,24 @@ class VendedorScreen extends StatefulWidget {
 class _VendedorScreenState extends State<VendedorScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = const [
-    CuentasScreen(),
-    InventarioScreen(),
-    CierreCajaScreen(),
-    ConfiguracionScreen(),
-  ];
+  final _cuentasKey = GlobalKey<CuentasScreenState>();
+
+  List<Widget> get _screens => [
+        CuentasScreen(key: _cuentasKey),
+        const InventarioScreen(),
+        const CierreCajaScreen(),
+        const ConfiguracionScreen(),
+      ];
 
   void _onTabSelected(int index) {
     HapticFeedback.selectionClick();
+    if (_selectedIndex == index) return;
+
     setState(() => _selectedIndex = index);
+
+    if (index == 0) {
+      _cuentasKey.currentState?.cargar();
+    }
   }
 
   @override
