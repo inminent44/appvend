@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.varanova.administrador"
+    namespace = "com.varanova.poscaja"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.varanova.administrador"
+        applicationId = "com.varanova.poscaja"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

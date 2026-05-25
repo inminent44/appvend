@@ -1,5 +1,5 @@
-name: pos_admin
-description: "VaraNova"
+name: pos_caja
+description: "VaraNova-PosCaja"
 publish_to: 'none'
 version: 1.0.0+1
 

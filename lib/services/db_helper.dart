@@ -1,14 +1,16 @@
 import 'dart:io';
-import 'package:intl/intl.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'package:xml/xml.dart';
+import 'package:intl/intl.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 
-import '../models/producto.dart';
-import '../models/movimiento.dart';
+import '../models/venta.dart';
+import '../models/cuenta_abierta.dart';
+import '../services/license_service.dart';
 
 class DBHelper {
   static final DBHelper instance = DBHelper._internal();
@@ -30,281 +32,289 @@ class DBHelper {
     return _database!;
   }
 
-  // ─── INIT ──────────────────────────────────────────────────────────────────
-
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'pos_admin.db');
+    final path = join(dbPath, 'pos_vendedor.db');
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
             id          INTEGER PRIMARY KEY,
-            nombre      TEXT    NOT NULL,
-            precioVenta REAL    NOT NULL,
-            stockActual REAL    NOT NULL DEFAULT 0
+            nombre      TEXT NOT NULL,
+            precioVenta REAL NOT NULL,
+            stockActual REAL NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('''
-          CREATE TABLE movimientos (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          CREATE TABLE ventas (
+            id_venta TEXT PRIMARY KEY,
+            fecha    TEXT NOT NULL,
+            total    REAL NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE detalle_venta (
+            id_detalle  TEXT PRIMARY KEY,
+            id_venta    TEXT NOT NULL,
             producto_id INTEGER NOT NULL,
-            cantidad    REAL    NOT NULL,
-            fecha       TEXT    NOT NULL,
-            tipo        TEXT    NOT NULL,
-            nota        TEXT,
+            cantidad    REAL NOT NULL,
+            precio      REAL NOT NULL,
+            total       REAL NOT NULL,
+            FOREIGN KEY (id_venta)    REFERENCES ventas (id_venta),
             FOREIGN KEY (producto_id) REFERENCES productos (id)
           )
         ''');
         await db.execute('''
-          CREATE TABLE cierres_importados (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            archivo   TEXT NOT NULL UNIQUE,
-            fecha_imp TEXT NOT NULL
+          CREATE TABLE cierres_turno (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha   TEXT NOT NULL,
+            cerrado INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('''
-          CREATE TABLE ventas_importadas (
-            id_venta  TEXT    NOT NULL PRIMARY KEY,
-            fecha     TEXT    NOT NULL,
-            total     REAL    NOT NULL,
-            cierre_id INTEGER NOT NULL,
-            FOREIGN KEY (cierre_id) REFERENCES cierres_importados (id)
+          CREATE TABLE inventarios_importados (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash     TEXT NOT NULL UNIQUE,
+            fecha    TEXT NOT NULL
           )
         ''');
         await db.execute('''
-          CREATE TABLE detalle_venta_importada (
-            id_detalle  TEXT    NOT NULL,
-            id_venta    TEXT    NOT NULL,
+          CREATE TABLE cuentas_abiertas (
+            id         TEXT PRIMARY KEY,
+            nombre     TEXT NOT NULL,
+            abierta_en TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE items_cuenta (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            cuenta_id   TEXT NOT NULL,
             producto_id INTEGER NOT NULL,
-            cantidad    REAL    NOT NULL,
-            precio      REAL    NOT NULL,
-            total       REAL    NOT NULL,
-            FOREIGN KEY (id_venta) REFERENCES ventas_importadas (id_venta)
+            nombre      TEXT NOT NULL,
+            cantidad    REAL NOT NULL,
+            precio      REAL NOT NULL,
+            FOREIGN KEY (cuenta_id)   REFERENCES cuentas_abiertas (id),
+            FOREIGN KEY (producto_id) REFERENCES productos (id)
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS inventarios_importados (
+              id       INTEGER PRIMARY KEY AUTOINCREMENT,
+              hash     TEXT NOT NULL UNIQUE,
+              fecha    TEXT NOT NULL
+            )
+          ''');
+        }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cuentas_abiertas (
+              id         TEXT PRIMARY KEY,
+              nombre     TEXT NOT NULL,
+              abierta_en TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS items_cuenta (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              cuenta_id   TEXT NOT NULL,
+              producto_id INTEGER NOT NULL,
+              nombre      TEXT NOT NULL,
+              cantidad    REAL NOT NULL,
+              precio      REAL NOT NULL,
+              FOREIGN KEY (cuenta_id)   REFERENCES cuentas_abiertas (id),
+              FOREIGN KEY (producto_id) REFERENCES productos (id)
+            )
+          ''');
+        }
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
     );
   }
 
-  // ─── PRODUCTOS ─────────────────────────────────────────────────────────────
+  // ─── INVENTARIO ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> obtenerProductosConStock() async {
     final db = await database;
-    return db.rawQuery('''
-      SELECT
-        p.id,
-        p.nombre,
-        p.precioVenta,
-        COALESCE(
-          (SELECT SUM(m.cantidad) FROM movimientos m WHERE m.producto_id = p.id),
-          0
-        ) AS stockActual
-      FROM productos p
-      ORDER BY p.nombre ASC
-    ''');
+    return db.query('productos', orderBy: 'nombre ASC');
   }
 
-  Future<void> insertarProducto(Producto producto) async {
+  /// Devuelve true si este inventario ya fue importado antes (mismo contenido).
+  Future<bool> inventarioYaImportado(String contenido) async {
     final db = await database;
-    await db.insert('productos', producto.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<void> eliminarProducto(int id) async {
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn
-          .delete('movimientos', where: 'producto_id = ?', whereArgs: [id]);
-      await txn.delete('productos', where: 'id = ?', whereArgs: [id]);
-    });
-  }
-
-  Future<void> editarProducto({
-    required int id,
-    required String nombre,
-    required double precioVenta,
-  }) async {
-    final db = await database;
-    await db.update(
-      'productos',
-      {'nombre': nombre, 'precioVenta': precioVenta},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  // ─── MOVIMIENTOS ───────────────────────────────────────────────────────────
-
-  Future<void> insertarMovimiento(Movimiento movimiento) async {
-    final db = await database;
-    await db.insert('movimientos', movimiento.toMap());
-  }
-
-  Future<void> ajustarStock({
-    required int productoId,
-    required double cantidad,
-    required String nota,
-  }) async {
-    final db = await database;
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    await db.insert('movimientos', {
-      'producto_id': productoId,
-      'cantidad': cantidad,
-      'fecha': hoy,
-      'tipo': Movimiento.tipoAjuste,
-      'nota': nota,
-    });
-  }
-
-  // ─── EXPORTAR INVENTARIO AL VENDEDOR ──────────────────────────────────────
-  // Se comparte por WhatsApp, email, Drive, etc.
-
-  Future<void> exportarInventario() async {
-    final productos = await obtenerProductosConStock();
-
-    final builder = XmlBuilder();
-    builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-    builder.element('Inventario', nest: () {
-      for (final p in productos) {
-        builder.element('Producto', nest: () {
-          builder.element('id', nest: p['id'].toString());
-          builder.element('nombre', nest: p['nombre'].toString());
-          builder.element('precioVenta', nest: p['precioVenta'].toString());
-          builder.element('stockActual', nest: p['stockActual'].toString());
-        });
-      }
-    });
-
-    final xmlStr = builder.buildDocument().toXmlString();
-    final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-    final dir = await getTemporaryDirectory();
-    final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
-    final file = File('${dir.path}/inventario_$hoy.inv');
-    await file.writeAsString(encrypted.base64);
-
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Inventario $hoy',
-    );
-  }
-
-  // ─── CIERRES DE CAJA ──────────────────────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> obtenerHistorialCierres() async {
-    final db = await database;
-    return db.query('cierres_importados', orderBy: 'id DESC');
-  }
-
-  Future<bool> cierreYaImportado(String nombreArchivo) async {
-    final db = await database;
+    final hash = contenido.length > 64 ? contenido.substring(0, 64) : contenido;
     final res = await db.query(
-      'cierres_importados',
-      where: 'archivo = ?',
-      whereArgs: [nombreArchivo],
+      'inventarios_importados',
+      where: 'hash = ?',
+      whereArgs: [hash],
       limit: 1,
     );
     return res.isNotEmpty;
   }
 
-  Future<void> importarCierreCaja(File archivo) async {
+  Future<void> _registrarInventarioImportado(String contenido) async {
     final db = await database;
-    final contenido = await archivo.readAsString();
-    final xmlString =
-        _encrypter.decrypt(enc.Encrypted.fromBase64(contenido), iv: _iv);
-    final document = XmlDocument.parse(xmlString);
-    final nombreArchivo = archivo.path.split('/').last;
-    final fechaImp = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    final hash = contenido.length > 64 ? contenido.substring(0, 64) : contenido;
+    final fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    await db.insert(
+      'inventarios_importados',
+      {'hash': hash, 'fecha': fecha},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
 
+  // ─── VENTAS ───────────────────────────────────────────────────────────────
+
+  Future<void> realizarVenta(Venta venta, List<DetalleVenta> detalles) async {
+    final db = await database;
     await db.transaction((txn) async {
-      final cierreId = await txn.insert(
-        'cierres_importados',
-        {'archivo': nombreArchivo, 'fecha_imp': fechaImp},
-        conflictAlgorithm: ConflictAlgorithm.fail,
-      );
-
-      for (final v in document.findAllElements('Venta')) {
-        final data = _xmlToMap(v);
-        await txn.insert(
-          'ventas_importadas',
-          {
-            'id_venta': data['id_venta'],
-            'fecha': data['fecha'],
-            'total': double.tryParse(data['total'].toString()) ?? 0.0,
-            'cierre_id': cierreId,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
+      await txn.insert('ventas', venta.toMap());
+      for (var d in detalles) {
+        await txn.insert('detalle_venta', d.toMap());
+        await txn.rawUpdate(
+          'UPDATE productos SET stockActual = stockActual - ? WHERE id = ?',
+          [d.cantidad, d.productoId],
         );
-      }
-
-      for (final d in document.findAllElements('Detalle')) {
-        final data = _xmlToMap(d);
-        final cantidad = double.tryParse(data['cantidad'].toString()) ?? 0.0;
-        final precio = double.tryParse(data['precio'].toString()) ?? 0.0;
-        final prodId = int.tryParse(data['producto_id'].toString()) ?? 0;
-
-        await txn.insert(
-          'detalle_venta_importada',
-          {
-            'id_detalle': data['id_detalle'],
-            'id_venta': data['id_venta'],
-            'producto_id': prodId,
-            'cantidad': cantidad,
-            'precio': precio,
-            'total': double.tryParse(data['total'].toString()) ?? 0.0,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-
-        final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        await txn.insert('movimientos', {
-          'producto_id': prodId,
-          'cantidad': -cantidad,
-          'fecha': hoy,
-          'tipo': 'venta_vendedor',
-          'nota': 'Cierre importado: $nombreArchivo',
-        });
       }
     });
   }
 
-  Future<Map<String, dynamic>> obtenerResumenPorFecha(String fechaImp) async {
+  Future<List<Map<String, dynamic>>> obtenerVentasDelDia(String fecha) async {
     final db = await database;
-    final cierres = await db.query(
-      'cierres_importados',
-      where: 'fecha_imp = ?',
-      whereArgs: [fechaImp],
+    return db.query('ventas',
+        where: 'fecha = ?', whereArgs: [fecha], orderBy: 'id_venta DESC');
+  }
+
+  Future<void> eliminarVenta(String idVenta) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final detalles = await txn
+          .query('detalle_venta', where: 'id_venta = ?', whereArgs: [idVenta]);
+      for (var d in detalles) {
+        await txn.rawUpdate(
+          'UPDATE productos SET stockActual = stockActual + ? WHERE id = ?',
+          [(d['cantidad'] as num).toDouble(), d['producto_id']],
+        );
+      }
+      await txn
+          .delete('detalle_venta', where: 'id_venta = ?', whereArgs: [idVenta]);
+      await txn.delete('ventas', where: 'id_venta = ?', whereArgs: [idVenta]);
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> obtenerDetallesDeVenta(
+      String idVenta) async {
+    final db = await database;
+    return db.rawQuery('''
+      SELECT dv.*, p.nombre
+      FROM detalle_venta dv
+      JOIN productos p ON p.id = dv.producto_id
+      WHERE dv.id_venta = ?
+    ''', [idVenta]);
+  }
+
+  Future<void> actualizarProductoDetalle({
+    required String idDetalle,
+    required String idVenta,
+    required int productoIdAnterior,
+    required int cantidadAnterior,
+    required int productoIdNuevo,
+    required int nuevaCantidad,
+    required double nuevoPrecio,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.rawUpdate(
+        'UPDATE productos SET stockActual = stockActual + ? WHERE id = ?',
+        [cantidadAnterior, productoIdAnterior],
+      );
+      await txn.rawUpdate(
+        '''UPDATE detalle_venta
+           SET producto_id = ?, cantidad = ?, precio = ?, total = ?
+           WHERE id_detalle = ?''',
+        [
+          productoIdNuevo,
+          nuevaCantidad,
+          nuevoPrecio,
+          nuevaCantidad * nuevoPrecio,
+          idDetalle,
+        ],
+      );
+      await txn.rawUpdate(
+        'UPDATE productos SET stockActual = stockActual - ? WHERE id = ?',
+        [nuevaCantidad, productoIdNuevo],
+      );
+      await txn.rawUpdate('''
+        UPDATE ventas SET total = (
+          SELECT COALESCE(SUM(total), 0) FROM detalle_venta WHERE id_venta = ?
+        ) WHERE id_venta = ?
+      ''', [idVenta, idVenta]);
+    });
+  }
+
+  // ─── TURNO ────────────────────────────────────────────────────────────────
+
+  Future<bool> esTurnoCerrado() async {
+    final db = await database;
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final res = await db.query('cierres_turno',
+        where: 'fecha = ? AND cerrado = 1', whereArgs: [hoy], limit: 1);
+    return res.isNotEmpty;
+  }
+
+  /// Devuelve la fecha en que se cerró el turno, o null si no hay cierre.
+  Future<String?> obtenerFechaCierreTurno() async {
+    final db = await database;
+    final res = await db.query(
+      'cierres_turno',
+      where: 'cerrado = 1',
+      orderBy: 'id DESC',
       limit: 1,
     );
-    if (cierres.isEmpty) {
-      return {'totalVentas': 0.0, 'numeroVentas': 0, 'detalle': []};
-    }
-    final cierreId = cierres.first['id'] as int;
+    if (res.isEmpty) return null;
+    return res.first['fecha'] as String?;
+  }
 
-    final totales = await db.rawQuery('''
-      SELECT
-        COALESCE(SUM(vi.total), 0.0) AS totalVentas,
-        COUNT(*)                     AS numeroVentas
-      FROM ventas_importadas vi
-      WHERE vi.cierre_id = ?
-    ''', [cierreId]);
+  Future<void> cerrarTurno() async {
+    final db = await database;
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    await db.insert('cierres_turno', {'fecha': hoy, 'cerrado': 1},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 
+  Future<void> iniciarNuevoDia() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('detalle_venta');
+      await txn.delete('ventas');
+      await txn.delete('cierres_turno');
+    });
+  }
+
+  // ─── CIERRE DE CAJA ───────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> obtenerResumenCierre() async {
+    final db = await database;
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final totales = await db.rawQuery(
+      'SELECT COALESCE(SUM(total),0.0) AS totalVentas, COUNT(*) AS numeroVentas '
+      'FROM ventas WHERE fecha = ?',
+      [hoy],
+    );
     final detalle = await db.rawQuery('''
-      SELECT
-        COALESCE(p.nombre, 'ID ' || dvi.producto_id) AS nombre,
-        SUM(dvi.cantidad)                             AS cantidadTotal,
-        SUM(dvi.total)                                AS totalVendido
-      FROM detalle_venta_importada dvi
-      JOIN ventas_importadas vi ON vi.id_venta = dvi.id_venta
-      LEFT JOIN productos p     ON p.id = dvi.producto_id
-      WHERE vi.cierre_id = ?
-      GROUP BY dvi.producto_id
-      ORDER BY totalVendido DESC
-    ''', [cierreId]);
+      SELECT p.nombre, SUM(dv.cantidad) AS cantidadTotal, SUM(dv.total) AS totalVendido
+      FROM detalle_venta dv
+      JOIN ventas v ON v.id_venta = dv.id_venta
+      JOIN productos p ON p.id = dv.producto_id
+      WHERE v.fecha = ?
+      GROUP BY p.id ORDER BY totalVendido DESC
+    ''', [hoy]);
 
     return {
       'totalVentas': (totales.first['totalVentas'] as num).toDouble(),
@@ -313,159 +323,320 @@ class DBHelper {
     };
   }
 
-  // ─── BACKUP ────────────────────────────────────────────────────────────────
-  // Se guarda directamente en el dispositivo sin opción de compartir.
-
-  Future<String> exportarBackup() async {
+  /// Exporta el cierre incluyendo el número de dispositivo en el nombre del archivo.
+  Future<void> exportarCierreCaja() async {
     final db = await database;
-    final productos = await db.query('productos');
-    final movimientos = await db.query('movimientos');
-    final cierres = await db.query('cierres_importados');
-    final ventas = await db.query('ventas_importadas');
-    final detalles = await db.query('detalle_venta_importada');
+    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final ventas =
+        await db.query('ventas', where: 'fecha = ?', whereArgs: [hoy]);
+    final detalles = await db.rawQuery(
+      'SELECT dv.* FROM detalle_venta dv '
+      'JOIN ventas v ON v.id_venta = dv.id_venta WHERE v.fecha = ?',
+      [hoy],
+    );
+
+    final codigoDispositivo =
+        await LicenseService.generarCodigoDispositivo();
 
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-    builder.element('Backup', nest: () {
-      _escribirTabla(builder, 'Productos', 'Producto', productos);
-      _escribirTabla(builder, 'Movimientos', 'Movimiento', movimientos);
-      _escribirTabla(builder, 'Cierres', 'Cierre', cierres);
-      _escribirTabla(builder, 'Ventas', 'Venta', ventas);
-      _escribirTabla(builder, 'Detalles', 'Detalle', detalles);
+    builder.element('CierreCaja', nest: () {
+      builder.element('Dispositivo', nest: codigoDispositivo);
+      builder.element('Fecha', nest: hoy);
+      builder.element('Ventas', nest: () {
+        for (var v in ventas) {
+          builder.element('Venta', nest: () {
+            v.forEach((k, val) => builder.element(k, nest: val.toString()));
+          });
+        }
+      });
+      builder.element('Detalles', nest: () {
+        for (var d in detalles) {
+          builder.element('Detalle', nest: () {
+            d.forEach((k, v) => builder.element(k, nest: v.toString()));
+          });
+        }
+      });
     });
 
-    final xmlStr = builder.buildDocument().toXmlString();
-    final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-    final hoy = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-
-    // Guardar en Descargas del dispositivo sin compartir
-    Directory? destDir;
-    if (Platform.isAndroid) {
-      destDir =
-          await getExternalStorageDirectory() ?? await getTemporaryDirectory();
-    } else {
-      destDir = await getApplicationDocumentsDirectory();
-    }
-
-    final file = File('${destDir.path}/backup_admin_$hoy.bkp');
+    final encrypted =
+        _encrypter.encrypt(builder.buildDocument().toXmlString(), iv: _iv);
+    final directory = await getTemporaryDirectory();
+    final fechaStr = hoy.replaceAll('-', '');
+    final file = File(
+        '${directory.path}/cierre_${fechaStr}_$codigoDispositivo.gv');
     await file.writeAsString(encrypted.base64);
-    return file.path;
+
+    await cerrarTurno();
+    await Share.shareXFiles([XFile(file.path)], text: 'Cierre $hoy — $codigoDispositivo');
   }
 
-  Future<void> restaurarBackup(File archivo) async {
+  // ─── IMPORTAR INVENTARIO DEL ADMIN ────────────────────────────────────────
+
+  Future<void> importarInventarioAdmin(File archivo) async {
     final db = await database;
     final contenido = await archivo.readAsString();
+
+    final yaImportado = await inventarioYaImportado(contenido);
+    if (yaImportado) {
+      throw Exception('Este inventario ya fue importado anteriormente.');
+    }
+
     final xmlString =
         _encrypter.decrypt(enc.Encrypted.fromBase64(contenido), iv: _iv);
     final document = XmlDocument.parse(xmlString);
 
     await db.transaction((txn) async {
-      await txn.delete('detalle_venta_importada');
-      await txn.delete('ventas_importadas');
-      await txn.delete('cierres_importados');
-      await txn.delete('movimientos');
       await txn.delete('productos');
-
-      for (final el in document.findAllElements('Producto')) {
-        final m = _xmlToMap(el);
+      for (var p in document.findAllElements('Producto')) {
+        final data = _xmlElementToMap(p);
         await txn.insert(
             'productos',
             {
-              'id': int.tryParse(m['id'].toString()) ?? 0,
-              'nombre': m['nombre'],
-              'precioVenta':
-                  double.tryParse(m['precioVenta'].toString()) ?? 0.0,
-              'stockActual':
-                  double.tryParse(m['stockActual'].toString()) ?? 0.0,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      for (final el in document.findAllElements('Movimiento')) {
-        final m = _xmlToMap(el);
-        await txn.insert(
-            'movimientos',
-            {
-              'id': int.tryParse(m['id'].toString()),
-              'producto_id': int.tryParse(m['producto_id'].toString()) ?? 0,
-              'cantidad': double.tryParse(m['cantidad'].toString()) ?? 0.0,
-              'fecha': m['fecha'],
-              'tipo': m['tipo'],
-              'nota': m['nota'],
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      for (final el in document.findAllElements('Cierre')) {
-        final m = _xmlToMap(el);
-        await txn.insert(
-            'cierres_importados',
-            {
-              'id': int.tryParse(m['id'].toString()),
-              'archivo': m['archivo'],
-              'fecha_imp': m['fecha_imp'],
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      for (final el in document.findAllElements('Venta')) {
-        final m = _xmlToMap(el);
-        await txn.insert(
-            'ventas_importadas',
-            {
-              'id_venta': m['id_venta'],
-              'fecha': m['fecha'],
-              'total': double.tryParse(m['total'].toString()) ?? 0.0,
-              'cierre_id': int.tryParse(m['cierre_id'].toString()) ?? 0,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      for (final el in document.findAllElements('Detalle')) {
-        final m = _xmlToMap(el);
-        await txn.insert(
-            'detalle_venta_importada',
-            {
-              'id_detalle': m['id_detalle'],
-              'id_venta': m['id_venta'],
-              'producto_id': int.tryParse(m['producto_id'].toString()) ?? 0,
-              'cantidad': double.tryParse(m['cantidad'].toString()) ?? 0.0,
-              'precio': double.tryParse(m['precio'].toString()) ?? 0.0,
-              'total': double.tryParse(m['total'].toString()) ?? 0.0,
+              'id': data['id'],
+              'nombre': data['nombre'],
+              'precioVenta': data['precioVenta'],
+              'stockActual': data['stockActual'] ?? 0.0,
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
+
+    await _registrarInventarioImportado(contenido);
   }
 
-  // ─── HELPERS ───────────────────────────────────────────────────────────────
-
-  void _escribirTabla(XmlBuilder builder, String tagPadre, String tagHijo,
-      List<Map<String, dynamic>> rows) {
-    builder.element(tagPadre, nest: () {
-      for (final row in rows) {
-        builder.element(tagHijo, nest: () {
-          row.forEach((k, v) => builder.element(k, nest: v?.toString() ?? ''));
-        });
-      }
-    });
-  }
-
-  Map<String, dynamic> _xmlToMap(XmlElement element) {
-    final map = <String, dynamic>{};
-    for (final child in element.children) {
+  Map<String, dynamic> _xmlElementToMap(XmlElement element) {
+    final Map<String, dynamic> data = {};
+    for (var child in element.children) {
       if (child is XmlElement) {
-        map[child.name.local] = child.innerText;
+        final key = child.name.local;
+        final val = child.innerText;
+        if (['id', 'producto_id'].contains(key)) {
+          data[key] = int.tryParse(val);
+        } else if (['cantidad', 'precio', 'total', 'precioVenta', 'stockActual']
+            .contains(key)) {
+          data[key] = double.tryParse(val);
+        } else {
+          data[key] = val;
+        }
       }
     }
-    return map;
+    return data;
   }
 
-  Future<double> obtenerTotalVentasHoy() async {
+  // ─── CUENTAS ABIERTAS ─────────────────────────────────────────────────────
+
+  /// Lista todas las cuentas abiertas con sus items.
+  Future<List<CuentaAbierta>> obtenerCuentasAbiertas() async {
     final db = await database;
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final result = await db.rawQuery('''
-      SELECT COALESCE(SUM(vi.total), 0.0) AS totalHoy
-      FROM ventas_importadas vi
-      JOIN cierres_importados ci ON ci.id = vi.cierre_id
-      WHERE ci.fecha_imp LIKE ?
-    ''', ['$hoy%']);
-    return (result.first['totalHoy'] as num).toDouble();
+    final cuentas = await db.query('cuentas_abiertas', orderBy: 'abierta_en ASC');
+    final result = <CuentaAbierta>[];
+    for (final c in cuentas) {
+      final items = await db.query(
+        'items_cuenta',
+        where: 'cuenta_id = ?',
+        whereArgs: [c['id']],
+      );
+      result.add(CuentaAbierta.fromMap(c, items));
+    }
+    return result;
+  }
+
+  /// Crea una cuenta vacía. Devuelve la cuenta creada.
+  Future<CuentaAbierta> crearCuenta(String nombre) async {
+    final db = await database;
+    final cuenta = CuentaAbierta(
+      id: const Uuid().v4(),
+      nombre: nombre,
+      items: [],
+      abiertaEn: DateTime.now(),
+    );
+    await db.insert('cuentas_abiertas', cuenta.toMap());
+    return cuenta;
+  }
+
+  /// Agrega un item a la cuenta y descuenta stock inmediatamente.
+  /// Lanza excepción si no hay stock suficiente.
+  Future<void> agregarItemCuenta({
+    required String cuentaId,
+    required int productoId,
+    required String nombreProducto,
+    required double cantidad,
+    required double precio,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Verificar stock disponible
+      final stockRes = await txn.query(
+        'productos',
+        columns: ['stockActual'],
+        where: 'id = ?',
+        whereArgs: [productoId],
+        limit: 1,
+      );
+      if (stockRes.isEmpty) throw Exception('Producto no encontrado');
+      final stock = (stockRes.first['stockActual'] as num).toDouble();
+      if (stock < cantidad) {
+        throw Exception('Stock insuficiente (disponible: ${stock.toStringAsFixed(0)})');
+      }
+
+      // Ver si ya existe ese producto en la cuenta → sumar cantidad
+      final existing = await txn.query(
+        'items_cuenta',
+        where: 'cuenta_id = ? AND producto_id = ?',
+        whereArgs: [cuentaId, productoId],
+        limit: 1,
+      );
+
+      if (existing.isNotEmpty) {
+        final nuevoTotal =
+            (existing.first['cantidad'] as num).toDouble() + cantidad;
+        await txn.update(
+          'items_cuenta',
+          {'cantidad': nuevoTotal},
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      } else {
+        await txn.insert('items_cuenta', {
+          'cuenta_id': cuentaId,
+          'producto_id': productoId,
+          'nombre': nombreProducto,
+          'cantidad': cantidad,
+          'precio': precio,
+        });
+      }
+
+      // Descontar stock
+      await txn.rawUpdate(
+        'UPDATE productos SET stockActual = stockActual - ? WHERE id = ?',
+        [cantidad, productoId],
+      );
+    });
+  }
+
+  /// Quita una unidad de un item. Si llega a 0, elimina el item y devuelve stock.
+  Future<void> quitarItemCuenta({
+    required String cuentaId,
+    required int productoId,
+    required double cantidad,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'items_cuenta',
+        where: 'cuenta_id = ? AND producto_id = ?',
+        whereArgs: [cuentaId, productoId],
+        limit: 1,
+      );
+      if (existing.isEmpty) return;
+
+      final cantActual = (existing.first['cantidad'] as num).toDouble();
+      final cantQuitar = cantidad.clamp(0, cantActual);
+
+      if (cantActual - cantQuitar <= 0) {
+        await txn.delete(
+          'items_cuenta',
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      } else {
+        await txn.update(
+          'items_cuenta',
+          {'cantidad': cantActual - cantQuitar},
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      }
+
+      // Devolver stock
+      await txn.rawUpdate(
+        'UPDATE productos SET stockActual = stockActual + ? WHERE id = ?',
+        [cantQuitar, productoId],
+      );
+    });
+  }
+
+  /// Cobra la cuenta: la convierte en Venta+DetalleVenta y la elimina.
+  /// El stock ya fue descontado al agregar — aquí solo se registra la venta.
+  Future<void> cobrarCuenta(CuentaAbierta cuenta) async {
+    final db = await database;
+    final idVenta = const Uuid().v4();
+    final fecha = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    await db.transaction((txn) async {
+      // Insertar venta
+      await txn.insert('ventas', {
+        'id_venta': idVenta,
+        'fecha': fecha,
+        'total': cuenta.total,
+      });
+
+      // Insertar detalles — stock YA descontado, no tocar
+      for (final item in cuenta.items) {
+        await txn.insert('detalle_venta', {
+          'id_detalle': const Uuid().v4(),
+          'id_venta': idVenta,
+          'producto_id': item.productoId,
+          'cantidad': item.cantidad,
+          'precio': item.precio,
+          'total': item.subtotal,
+        });
+      }
+
+      // Eliminar items y cuenta
+      await txn.delete(
+        'items_cuenta',
+        where: 'cuenta_id = ?',
+        whereArgs: [cuenta.id],
+      );
+      await txn.delete(
+        'cuentas_abiertas',
+        where: 'id = ?',
+        whereArgs: [cuenta.id],
+      );
+    });
+  }
+
+  /// Cancela la cuenta y DEVUELVE todo el stock.
+  Future<void> cancelarCuenta(CuentaAbierta cuenta) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final item in cuenta.items) {
+        await txn.rawUpdate(
+          'UPDATE productos SET stockActual = stockActual + ? WHERE id = ?',
+          [item.cantidad, item.productoId],
+        );
+      }
+      await txn.delete(
+        'items_cuenta',
+        where: 'cuenta_id = ?',
+        whereArgs: [cuenta.id],
+      );
+      await txn.delete(
+        'cuentas_abiertas',
+        where: 'id = ?',
+        whereArgs: [cuenta.id],
+      );
+    });
+  }
+
+  /// Carga una cuenta con sus items actualizados desde la BD.
+  Future<CuentaAbierta?> recargarCuenta(String cuentaId) async {
+    final db = await database;
+    final cuentas = await db.query(
+      'cuentas_abiertas',
+      where: 'id = ?',
+      whereArgs: [cuentaId],
+      limit: 1,
+    );
+    if (cuentas.isEmpty) return null;
+    final items = await db.query(
+      'items_cuenta',
+      where: 'cuenta_id = ?',
+      whereArgs: [cuentaId],
+    );
+    return CuentaAbierta.fromMap(cuentas.first, items);
   }
 }
