@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/db_helper.dart';
+import '../../services/db_helper_cajero.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -30,7 +30,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Future<void> _cargarProductos() async {
     setState(() => _cargando = true);
-    final data = await DBHelper.instance.obtenerProductosConStock();
+    final data = await DBHelperCajero.instance.obtenerProductosConStock();
     if (!mounted) return;
     setState(() {
       _productos          = data;

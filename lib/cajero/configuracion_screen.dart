@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
-import '../services/db_helper.dart';
+import '../services/db_helper_cajero.dart';
 import '../services/license_service.dart';
 
 class ConfiguracionScreen extends StatefulWidget {
@@ -30,7 +30,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
 
   Future<void> _cargarDatos() async {
     final codigo = await LicenseService.generarCodigoDispositivo();
-    final cerrado = await DBHelper.instance.esTurnoCerrado();
+    final cerrado = await DBHelperCajero.instance.esTurnoCerrado();
     final hoy = DateFormat('dd/MM/yyyy').format(DateTime.now());
     if (!mounted) return;
     setState(() {
@@ -58,7 +58,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
     setState(() => _importando = true);
     try {
       final file = File(result.files.single.path!);
-      await DBHelper.instance.importarInventarioAdmin(file);
+      await DBHelperCajero.instance.importarInventarioAdmin(file);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

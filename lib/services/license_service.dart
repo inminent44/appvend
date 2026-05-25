@@ -4,17 +4,24 @@ import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// ─── Nivel de activación ──────────────────────────────────────────────────────
 enum NivelApp { basico, bloqueado }
 
+// ─── Modo de la app según la licencia activada ────────────────────────────────
+enum ModoApp { admin, cajero, desconocido }
+
 class LicenseService {
-  static const String _keyActivado = 'app_activada';
-  static const String _keyLicencia = 'app_licencia';
+  // ── SharedPreferences keys ─────────────────────────────────────────────────
+  static const String _keyActivado  = 'app_activada';
+  static const String _keyLicencia  = 'app_licencia';
+  static const String _keyModo      = 'app_modo';   // 'admin' | 'cajero'
+
+  // ── Constantes de firma ────────────────────────────────────────────────────
   static const String _claveSecreta = 'MITHRA22';
+  static const String _prefijoAdmin = 'BA';
+  static const String _prefijoCajero = 'BV';
 
-  // ── Cambia solo esta línea entre la app Admin (BA) y Vendedor (BV) ────────
-  static const String _prefijoPropio = 'BA'; // ← 'BV' en App Vendedor
-
-  // ─── ID de dispositivo (igual que tenías) ─────────────────────────────────
+  // ─── ID de dispositivo ────────────────────────────────────────────────────
   static Future<String> obtenerIdDispositivo() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -35,8 +42,7 @@ class LicenseService {
         '${hash.substring(8, 12)}';
   }
 
-  // ─── Fecha → token 6 chars base36 (igual que el HTML) ────────────────────
-
+  // ─── Token de fecha → DateTime ────────────────────────────────────────────
   static DateTime _tokenAFecha(String token) {
     final n = int.parse(token, radix: 36);
     final d = n % 100;
@@ -45,38 +51,44 @@ class LicenseService {
     return DateTime(y, m, d);
   }
 
-  // ─── Reconstruye la licencia esperada ─────────────────────────────────────
-  static String _crearLicencia(String codigoDispositivo, String tokFecha) {
-    final input = _prefijoPropio +
-        codigoDispositivo.replaceAll('-', '') +
-        tokFecha +
-        _claveSecreta;
+  // ─── Reconstruye la licencia esperada para un prefijo dado ───────────────
+  static String _crearLicencia(
+      String prefijo, String codigoDispositivo, String tokFecha) {
+    final input =
+        prefijo + codigoDispositivo.replaceAll('-', '') + tokFecha + _claveSecreta;
     final hash = sha256.convert(utf8.encode(input)).toString().toUpperCase();
-    return '$_prefijoPropio-$tokFecha-${hash.substring(0, 10)}';
+    return '$prefijo-$tokFecha-${hash.substring(0, 10)}';
   }
 
-  // ─── Validar y activar ────────────────────────────────────────────────────
+  // ─── Valida y activa — acepta BA o BV ─────────────────────────────────────
+  /// Devuelve true si la licencia es válida y se activó correctamente.
+  /// Internamente guarda el modo ('admin' o 'cajero') en SharedPreferences.
   static Future<bool> validarYActivar(String licenciaIngresada) async {
     try {
       final entrada = licenciaIngresada.trim().toUpperCase();
       final partes = entrada.split('-');
       if (partes.length != 3) return false;
 
-      final prefijo = partes[0];
-      final tokFecha = partes[1];
+      final prefijo   = partes[0];
+      final tokFecha  = partes[1];
 
-      if (prefijo != _prefijoPropio) return false;
+      // Solo aceptamos prefijos conocidos
+      if (prefijo != _prefijoAdmin && prefijo != _prefijoCajero) return false;
 
+      // Verificar fecha de expiración
       final expiracion = _tokenAFecha(tokFecha);
       if (DateTime.now().isAfter(expiracion)) return false;
 
-      final codigoDisp = await generarCodigoDispositivo();
-      final licenciaEsperada = _crearLicencia(codigoDisp, tokFecha);
+      // Verificar firma contra el dispositivo actual
+      final codigoDisp      = await generarCodigoDispositivo();
+      final licenciaEsperada = _crearLicencia(prefijo, codigoDisp, tokFecha);
 
       if (entrada == licenciaEsperada.toUpperCase()) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_keyActivado, true);
         await prefs.setString(_keyLicencia, entrada);
+        await prefs.setString(
+            _keyModo, prefijo == _prefijoAdmin ? 'admin' : 'cajero');
         return true;
       }
     } catch (_) {
@@ -85,13 +97,13 @@ class LicenseService {
     return false;
   }
 
-  // ─── Nivel actual (re-valida fecha en cada arranque) ──────────────────────
+  // ─── Nivel actual (re-valida fecha en cada arranque) ─────────────────────
   static Future<NivelApp> obtenerNivelActual() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs    = await SharedPreferences.getInstance();
     final activado = prefs.getBool(_keyActivado) ?? false;
     if (!activado) return NivelApp.bloqueado;
 
-    final lic = prefs.getString(_keyLicencia) ?? '';
+    final lic    = prefs.getString(_keyLicencia) ?? '';
     final partes = lic.split('-');
     if (partes.length != 3) return NivelApp.bloqueado;
 
@@ -108,10 +120,22 @@ class LicenseService {
     return NivelApp.basico;
   }
 
+  // ─── Modo guardado ────────────────────────────────────────────────────────
+  /// Devuelve el modo activo sin re-validar la licencia.
+  /// Llamar solo si `obtenerNivelActual()` ya devolvió `basico`.
+  static Future<ModoApp> obtenerModoActual() async {
+    final prefs = await SharedPreferences.getInstance();
+    final modo  = prefs.getString(_keyModo);
+    if (modo == 'admin')  return ModoApp.admin;
+    if (modo == 'cajero') return ModoApp.cajero;
+    return ModoApp.desconocido;
+  }
+
   // ─── Desactivar ───────────────────────────────────────────────────────────
   static Future<void> desactivar() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyActivado);
     await prefs.remove(_keyLicencia);
+    await prefs.remove(_keyModo);
   }
 }

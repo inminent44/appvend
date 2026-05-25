@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
-import '../models/venta.dart';
-import '../services/db_helper.dart';
+import '../../models/venta.dart';
+import '../../services/db_helper_cajero.dart';
 
 class RealizarVentaScreen extends StatefulWidget {
   const RealizarVentaScreen({super.key});
@@ -29,8 +29,8 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
 
   Future<void> _cargarDatos() async {
     final results = await Future.wait([
-      DBHelper.instance.obtenerProductosConStock(),
-      DBHelper.instance.esTurnoCerrado(),
+      DBHelperCajero.instance.obtenerProductosConStock(),
+      DBHelperCajero.instance.esTurnoCerrado(),
     ]);
     if (!mounted) return;
     final data = results[0] as List<Map<String, dynamic>>;
@@ -168,7 +168,7 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
   Future<void> _confirmarVenta() async {
     if (_carrito.isEmpty) return;
 
-    final turnoCerrado = await DBHelper.instance.esTurnoCerrado();
+    final turnoCerrado = await DBHelperCajero.instance.esTurnoCerrado();
     if (turnoCerrado) {
       if (!mounted) return;
       setState(() => _turnoCerrado = true);
@@ -199,7 +199,7 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
       total: totalVenta,
     );
 
-    await DBHelper.instance.realizarVenta(venta, detalles);
+    await DBHelperCajero.instance.realizarVenta(venta, detalles);
     if (!mounted) return;
 
     Navigator.pop(context, true);

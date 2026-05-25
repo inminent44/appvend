@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/db_helper.dart';
+import '../services/db_helper_cajero.dart';
 
 class CierreCajaScreen extends StatefulWidget {
   const CierreCajaScreen({super.key});
@@ -30,8 +30,8 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
     setState(() => _cargando = true);
     try {
       final results = await Future.wait([
-        DBHelper.instance.obtenerResumenCierre(),
-        DBHelper.instance.esTurnoCerrado(),
+        DBHelperCajero.instance.obtenerResumenCierre(),
+        DBHelperCajero.instance.esTurnoCerrado(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -50,7 +50,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
 
   Future<void> _exportarCierre() async {
     try {
-      await DBHelper.instance.exportarCierreCaja();
+      await DBHelperCajero.instance.exportarCierreCaja();
       if (!mounted) return;
       await _cargarDatos();
       if (!mounted) return;

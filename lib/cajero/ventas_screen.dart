@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import '../services/db_helper.dart';
+import '../../services/db_helper_cajero.dart';
 import 'realizar_venta_screen.dart';
 
 class VentasScreen extends StatefulWidget {
@@ -33,8 +33,8 @@ class _VentasScreenState extends State<VentasScreen> {
     final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     final results = await Future.wait([
-      DBHelper.instance.obtenerVentasDelDia(hoy),
-      DBHelper.instance.esTurnoCerrado(),
+      DBHelperCajero.instance.obtenerVentasDelDia(hoy),
+      DBHelperCajero.instance.esTurnoCerrado(),
     ]);
     if (!mounted) return;
 
@@ -45,7 +45,7 @@ class _VentasScreenState extends State<VentasScreen> {
     for (var v in data) {
       suma += (v['total'] as num).toDouble();
       final id = v['id_venta'].toString();
-      detalles[id] = await DBHelper.instance.obtenerDetallesDeVenta(id);
+      detalles[id] = await DBHelperCajero.instance.obtenerDetallesDeVenta(id);
     }
 
     setState(() {
@@ -87,7 +87,7 @@ class _VentasScreenState extends State<VentasScreen> {
     );
     if (confirmar != true || !mounted) return;
 
-    await DBHelper.instance.eliminarVenta(idVenta);
+    await DBHelperCajero.instance.eliminarVenta(idVenta);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Venta anulada. Stock devuelto.')),
@@ -246,7 +246,7 @@ class _VentasScreenState extends State<VentasScreen> {
                                                 style: const TextStyle(
                                                     fontSize: 13))),
                                         Text(
-                                          'x${(d['cantidad'] as num).toInt()}  ${_formatoMoneda.format(d['precio'])}',
+                                          'x${(d['cantidad'] as num).toInt()}  ${_formatoMoneda.format(d['precio'])} ',
                                           style: const TextStyle(
                                               fontSize: 13, color: Colors.grey),
                                         ),
@@ -335,7 +335,7 @@ class _EditarDetallesSheetState extends State<_EditarDetallesSheet> {
     final nuevoId = int.tryParse(_idControllers[index].text.trim());
     if (nuevoId == null) return;
 
-    final productos = await DBHelper.instance.obtenerProductosConStock();
+    final productos = await DBHelperCajero.instance.obtenerProductosConStock();
     final encontrado =
         productos.firstWhere((p) => p['id'] == nuevoId, orElse: () => {});
 
@@ -474,7 +474,7 @@ class _EditarDetallesSheetState extends State<_EditarDetallesSheet> {
                     final nuevoPrecio = (dActual['precio'] as num).toDouble();
 
                     // Método unificado: maneja cambio de producto Y de cantidad
-                    await DBHelper.instance.actualizarProductoDetalle(
+                    await DBHelperCajero.instance.actualizarProductoDetalle(
                       idDetalle: dOriginal['id_detalle'].toString(),
                       idVenta: widget.idVenta,
                       productoIdAnterior: productoIdAnterior,

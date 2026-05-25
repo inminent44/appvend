@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import '../models/cuenta_abierta.dart';
-import '../services/db_helper.dart';
+import '../../models/cuenta_abierta.dart';
+import '../../services/db_helper_cajero.dart';
 
 class CuentaDetalleScreen extends StatefulWidget {
   final String cuentaId;
@@ -35,8 +35,8 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     final results = await Future.wait([
-      DBHelper.instance.recargarCuenta(widget.cuentaId),
-      DBHelper.instance.obtenerProductosConStock(),
+      DBHelperCajero.instance.recargarCuenta(widget.cuentaId),
+      DBHelperCajero.instance.obtenerProductosConStock(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -61,7 +61,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
 
   Future<void> _agregarProducto(Map<String, dynamic> p, double cantidad) async {
     try {
-      await DBHelper.instance.agregarItemCuenta(
+      await DBHelperCajero.instance.agregarItemCuenta(
         cuentaId: widget.cuentaId,
         productoId: p['id'] as int,
         nombreProducto: p['nombre'] as String,
@@ -83,7 +83,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
 
   Future<void> _quitarItem(ItemCuenta item) async {
     HapticFeedback.selectionClick();
-    await DBHelper.instance.quitarItemCuenta(
+    await DBHelperCajero.instance.quitarItemCuenta(
       cuentaId: widget.cuentaId,
       productoId: item.productoId,
       cantidad: 1,
@@ -122,7 +122,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
 
     setState(() => _cobrando = true);
     try {
-      await DBHelper.instance.cobrarCuenta(_cuenta!);
+      await DBHelperCajero.instance.cobrarCuenta(_cuenta!);
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -567,8 +567,8 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
                   color: Color(0xFF1A1A2E))),
           const SizedBox(height: 8),
           Text('Toca "Agregar" para añadir productos',
-              style:
-                  TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+              style: TextStyle(
+                  color: Colors.grey.shade500, fontSize: 13)),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(

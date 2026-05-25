@@ -10,8 +10,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/cuenta_abierta.dart';
-import '../services/db_helper.dart';
+import '../../models/cuenta_abierta.dart';
+import '../../services/db_helper_cajero.dart';
 import 'cuenta_detalle_screen.dart';
 
 class CuentasScreen extends StatefulWidget {
@@ -40,8 +40,8 @@ class CuentasScreenState extends State<CuentasScreen> {
   Future<void> cargar() async {
     setState(() => _cargando = true);
     final results = await Future.wait([
-      DBHelper.instance.obtenerCuentasAbiertas(),
-      DBHelper.instance.esTurnoCerrado(),
+      DBHelperCajero.instance.obtenerCuentasAbiertas(),
+      DBHelperCajero.instance.esTurnoCerrado(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -93,7 +93,7 @@ class CuentasScreenState extends State<CuentasScreen> {
 
     if (nombre == null || nombre.isEmpty) return;
 
-    final cuenta = await DBHelper.instance.crearCuenta(nombre);
+    final cuenta = await DBHelperCajero.instance.crearCuenta(nombre);
     if (!mounted) return;
 
     // Ir directo a la cuenta recién creada
@@ -145,7 +145,7 @@ class CuentasScreenState extends State<CuentasScreen> {
     );
 
     if (confirmar != true) return;
-    await DBHelper.instance.cancelarCuenta(cuenta);
+    await DBHelperCajero.instance.cancelarCuenta(cuenta);
     if (!mounted) return;
     cargar();
     ScaffoldMessenger.of(context).showSnackBar(
