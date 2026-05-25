@@ -19,7 +19,6 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
   Map<String, dynamic>? _resumen;
   bool _cargando = false;
   bool _turnoCerrado = false;
-  bool _puedeIniciarNuevoDia = false;
 
   @override
   void initState() {
@@ -33,24 +32,11 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
       final results = await Future.wait([
         DBHelper.instance.obtenerResumenCierre(),
         DBHelper.instance.esTurnoCerrado(),
-        DBHelper.instance.obtenerFechaCierreTurno(),
       ]);
       if (!mounted) return;
-
-      final turnoCerrado = results[1] as bool;
-      final fechaCierre = results[2] as String?;
-
-      // Solo puede iniciar nuevo día si el cierre fue en un día anterior
-      bool puedeNuevoDia = false;
-      if (turnoCerrado && fechaCierre != null) {
-        final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        puedeNuevoDia = fechaCierre != hoy;
-      }
-
       setState(() {
         _resumen = results[0] as Map<String, dynamic>;
-        _turnoCerrado = turnoCerrado;
-        _puedeIniciarNuevoDia = puedeNuevoDia;
+        _turnoCerrado = results[1] as bool;
         _cargando = false;
       });
     } catch (e) {
@@ -75,68 +61,6 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al exportar: $e')),
-      );
-    }
-  }
-
-  Future<void> _confirmarNuevoDia() async {
-    if (!_puedeIniciarNuevoDia) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'El nuevo día solo puede iniciarse a partir del día siguiente al cierre.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.wb_sunny_outlined, color: Color(0xFF084B53)),
-            SizedBox(width: 8),
-            Text('Nuevo Día'),
-          ],
-        ),
-        content: const Text(
-          'Al iniciar un nuevo día se borrarán todas las ventas de hoy '
-          'del dispositivo.\n\n'
-          '⚠️ Asegúrate de haber exportado el cierre al Admin antes de continuar.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryDark,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Iniciar Nuevo Día'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar != true || !mounted) return;
-
-    try {
-      await DBHelper.instance.iniciarNuevoDia();
-      if (!mounted) return;
-      await _cargarDatos();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nuevo día iniciado. ¡Buenas ventas! 🌅')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al iniciar nuevo día: $e')),
       );
     }
   }
@@ -177,16 +101,14 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.orange.shade200),
                       ),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.lock_clock, color: Colors.orange),
-                          const SizedBox(width: 10),
+                          Icon(Icons.lock_clock, color: Colors.orange),
+                          SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              _puedeIniciarNuevoDia
-                                  ? 'Turno cerrado. Puedes iniciar un nuevo día.'
-                                  : 'Turno cerrado. El nuevo día estará disponible mañana.',
-                              style: const TextStyle(
+                              'Turno cerrado.',
+                              style: TextStyle(
                                   color: Colors.orange,
                                   fontWeight: FontWeight.w600),
                             ),
@@ -230,7 +152,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                   ),
                   const SizedBox(height: 30),
 
-                  // ── Detalle productos ─────────────────────────────────
+                  // ── Detalle productos vendidos ────────────────────────
                   const Text(
                     'Productos Vendidos Hoy',
                     style: TextStyle(
@@ -254,8 +176,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                             return Card(
                               elevation: 0,
                               shape: RoundedRectangleBorder(
-                                side:
-                                    BorderSide(color: Colors.grey.shade300),
+                                side: BorderSide(color: Colors.grey.shade300),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: ListTile(
@@ -265,8 +186,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                                 subtitle: Text(
                                     'Cant: ${(item['cantidadTotal'] as num).toStringAsFixed(0)}'),
                                 trailing: Text(
-                                  _formatoMoneda
-                                      .format(item['totalVendido']),
+                                  _formatoMoneda.format(item['totalVendido']),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold),
                                 ),
@@ -307,51 +227,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                           ? 'El cierre ya fue exportado hoy.'
                           : 'Envía este archivo al Admin para actualizar el inventario.',
                       textAlign: TextAlign.center,
-                      style:
-                          const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-                  const Divider(),
-                  const SizedBox(height: 10),
-
-                  // ── Botón nuevo día ───────────────────────────────────
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: OutlinedButton.icon(
-                      onPressed: _puedeIniciarNuevoDia
-                          ? _confirmarNuevoDia
-                          : null,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: primaryDark,
-                        side: BorderSide(
-                          color: _puedeIniciarNuevoDia
-                              ? primaryDark
-                              : Colors.grey,
-                        ),
-                        disabledForegroundColor: Colors.grey,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.wb_sunny_outlined),
-                      label: const Text(
-                        'INICIAR NUEVO DÍA',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Text(
-                      _puedeIniciarNuevoDia
-                          ? 'Borra las ventas de hoy del dispositivo.'
-                          : 'Disponible a partir del día siguiente al cierre.',
-                      textAlign: TextAlign.center,
-                      style:
-                          const TextStyle(color: Colors.grey, fontSize: 12),
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -367,10 +243,8 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
       child: Container(
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          // ignore: deprecated_member_use
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(15),
-          // ignore: deprecated_member_use
           border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: Column(
