@@ -219,7 +219,8 @@ class DBHelperCajero {
 
   // ─── VENTAS ────────────────────────────────────────────────────────────────
 
-  Future<void> realizarVenta(Venta venta, List<DetalleVenta> detalles, {String metodoPago = 'Efectivo'}) async {
+  Future<void> realizarVenta(Venta venta, List<DetalleVenta> detalles,
+      {String metodoPago = 'Efectivo'}) async {
     final db = await database;
     await db.transaction((txn) async {
       final ventaMap = venta.toMap();
@@ -388,11 +389,11 @@ class DBHelperCajero {
     ''', [hoy]);
 
     return {
-      'totalVentas':      (totales.first['totalVentas']  as num).toDouble(),
-      'numeroVentas':     (totales.first['numeroVentas'] as num).toInt(),
-      'detalle':          detalle,
+      'totalVentas': (totales.first['totalVentas'] as num).toDouble(),
+      'numeroVentas': (totales.first['numeroVentas'] as num).toInt(),
+      'detalle': detalle,
       'totalesPorMetodo': totalesMetodo,
-      'ventasQR':         ventasQR,   // lista con plataforma, cantidad, total_qr
+      'ventasQR': ventasQR, // lista con plataforma, cantidad, total_qr
     };
   }
 
@@ -441,8 +442,12 @@ class DBHelperCajero {
     await file.writeAsString(encrypted.base64);
 
     await cerrarTurno();
-    await Share.shareXFiles([XFile(file.path)],
-        text: 'Cierre $hoy — $codigoDispositivo');
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: 'Cierre $hoy — $codigoDispositivo',
+      ),
+    );
   }
 
   // ─── IMPORTAR INVENTARIO DEL ADMIN ─────────────────────────────────────────
@@ -643,9 +648,9 @@ class DBHelperCajero {
 
     await db.transaction((txn) async {
       await txn.insert('ventas', {
-        'id_venta':    idVenta,
-        'fecha':       fecha,
-        'total':       cuenta.total,
+        'id_venta': idVenta,
+        'fecha': fecha,
+        'total': cuenta.total,
         'metodo_pago': metodoPago,
       });
 
@@ -821,13 +826,13 @@ class DBHelperCajero {
   }) async {
     final db = await database;
     await db.insert('pagos_qr', {
-      'id_pago':        const Uuid().v4(),
-      'id_venta':       idVenta,
-      'plataforma':     plataforma,
+      'id_pago': const Uuid().v4(),
+      'id_venta': idVenta,
+      'plataforma': plataforma,
       'id_transaccion': idTransaccion,
-      'monto':          monto,
-      'moneda':         moneda,
-      'fecha_sms':      fechaSms,
+      'monto': monto,
+      'moneda': moneda,
+      'fecha_sms': fechaSms,
     });
   }
 
@@ -867,13 +872,13 @@ class DBHelperCajero {
 
       // Guardar detalle del pago QR
       await txn.insert('pagos_qr', {
-        'id_pago':        const Uuid().v4(),
-        'id_venta':       venta.idVenta,
-        'plataforma':     plataforma,
+        'id_pago': const Uuid().v4(),
+        'id_venta': venta.idVenta,
+        'plataforma': plataforma,
         'id_transaccion': idTransaccion,
-        'monto':          montoQR,
-        'moneda':         moneda,
-        'fecha_sms':      fechaSms,
+        'monto': montoQR,
+        'moneda': moneda,
+        'fecha_sms': fechaSms,
       });
     });
   }
