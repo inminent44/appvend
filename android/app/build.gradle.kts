@@ -38,20 +38,6 @@ android {
             )
         }
     }
-
-    flavorDimensions += "app"
-    productFlavors {
-        create("vendedor") {
-            dimension = "app"
-            applicationId = "com.tuempresa.varanova.vendedor"
-            resValue("string", "app_name", "VaraNova Vendedor")
-        }
-        create("admin") {
-            dimension = "app"
-            applicationId = "com.tuempresa.varanova.admin"
-            resValue("string", "app_name", "VaraNova Admin")
-        }
-    }
 }
 
 dependencies {
