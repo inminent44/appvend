@@ -284,7 +284,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
                                 color: primaryDark, size: 20),
                             SizedBox(width: 8),
                             Text(
-                              'VaraNova Vendedor',
+                              'VaraNova Pos Cajero',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -300,7 +300,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'App de ventas simplificada. Toda la gestión del negocio se realiza desde la app Admin.',
+                          'App de Pos Caja simplificada',
                           style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       ],
