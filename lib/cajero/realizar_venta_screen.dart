@@ -30,10 +30,9 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
   Future<void> _cargarDatos() async {
     final results = await Future.wait([
       DBHelperCajero.instance.obtenerProductosConStock(),
-      DBHelperCajero.instance.esTurnoCerrado(),
     ]);
     if (!mounted) return;
-    final data = results[0] as List<Map<String, dynamic>>;
+    final data = results[0];
     final turnoCerrado = results[1] as bool;
     setState(() {
       _turnoCerrado = turnoCerrado;
@@ -168,14 +167,6 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
   Future<void> _confirmarVenta() async {
     if (_carrito.isEmpty) return;
 
-    final turnoCerrado = await DBHelperCajero.instance.esTurnoCerrado();
-    if (turnoCerrado) {
-      if (!mounted) return;
-      setState(() => _turnoCerrado = true);
-      _mostrarBloqueo();
-      return;
-    }
-
     setState(() => _cargando = true);
 
     final idVenta = const Uuid().v4();
@@ -207,44 +198,6 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
       SnackBar(
           content: Text(
               'Venta \$${_formatPrecio(totalVenta)} registrada ✓')),
-    );
-  }
-
-  void _mostrarBloqueo() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_clock, color: Colors.orange, size: 28),
-            SizedBox(width: 10),
-            Text('Turno cerrado'),
-          ],
-        ),
-        content: const Text(
-          'El turno ya fue cerrado.\n\n'
-          'No se pueden registrar más ventas hasta que el Admin inicie un nuevo día.',
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Entendido'),
-          ),
-        ],
-      ),
     );
   }
 

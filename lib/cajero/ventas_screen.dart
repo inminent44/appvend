@@ -34,11 +34,10 @@ class _VentasScreenState extends State<VentasScreen> {
 
     final results = await Future.wait([
       DBHelperCajero.instance.obtenerVentasDelDia(hoy),
-      DBHelperCajero.instance.esTurnoCerrado(),
     ]);
     if (!mounted) return;
 
-    final data = results[0] as List<Map<String, dynamic>>;
+    final data = results[0];
     final turnoCerrado = results[1] as bool;
     double suma = 0;
     final Map<String, List<Map<String, dynamic>>> detalles = {};

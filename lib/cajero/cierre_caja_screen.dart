@@ -1,3 +1,4 @@
+// lib/vendedor/screens/cierre_caja_screen.dart
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,14 +15,13 @@ class CierreCajaScreen extends StatefulWidget {
 class _CierreCajaScreenState extends State<CierreCajaScreen> {
   static const Color primaryDark = Color(0xFF084B53);
 
-  final _formatoMoneda =
+  final _fmtMoneda =
       NumberFormat.currency(symbol: '\$', decimalDigits: 2, locale: 'es_MX');
-  final _formatoFecha = DateFormat('dd/MM/yyyy');
+  final _fmtFecha = DateFormat('dd/MM/yyyy');
 
   Map<String, dynamic>? _resumen;
-  bool _cargando = false;
-  bool _turnoCerrado = false;
-  bool _importando = false; // Nueva variable de estado
+  bool _cargando  = false;
+  bool _operando  = false; // spinner genérico para acciones
 
   @override
   void initState() {
@@ -32,46 +32,61 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
   Future<void> _cargarDatos() async {
     setState(() => _cargando = true);
     try {
-      final results = await Future.wait([
-        DBHelperCajero.instance.obtenerResumenCierre(),
-        DBHelperCajero.instance.esTurnoCerrado(),
-      ]);
+      final resumen = await DBHelperCajero.instance.obtenerResumenCierre();
       if (!mounted) return;
       setState(() {
-        _resumen = results[0] as Map<String, dynamic>;
-        _turnoCerrado = results[1] as bool;
+        _resumen = resumen;
         _cargando = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _cargando = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al cargar datos: $e')),
-      );
+      _snack('Error al cargar datos: $e');
     }
   }
 
+  // ─── Exportar cierre ───────────────────────────────────────────────────
+
   Future<void> _exportarCierre() async {
-    setState(() => _importando = true);
+    setState(() => _operando = true);
     try {
       await DBHelperCajero.instance.exportarCierreCaja();
       if (!mounted) return;
-      await _cargarDatos();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cierre exportado y turno cerrado ✓')),
-      );
+      _snack('Cierre exportado ✓', color: Colors.green);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al exportar: $e')),
-      );
+      _snack('Error al exportar: $e');
     } finally {
-      if(mounted) {
-        setState(() => _importando = false);
-      }
+      if (mounted) setState(() => _operando = false);
     }
   }
+
+  // ─── Importar inventario ───────────────────────────────────────────────
+
+  Future<void> _importarInventario() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+    if (result == null || result.files.single.path == null) return;
+
+    setState(() => _operando = true);
+    try {
+      final file = File(result.files.single.path!);
+      await DBHelperCajero.instance.importarInventarioAdmin(file);
+      if (!mounted) return;
+      _snack('Inventario importado ✓', color: Colors.green);
+      await _cargarDatos();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Error: ${e.toString().replaceFirst('Exception: ', '')}',
+          color: Colors.red);
+    } finally {
+      if (mounted) setState(() => _operando = false);
+    }
+  }
+
+  // ─── Importar cierre de turno anterior ────────────────────────────────
 
   Future<void> _importarCierreTurno() async {
     final result = await FilePicker.platform.pickFiles(
@@ -80,39 +95,40 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
     );
     if (result == null || result.files.single.path == null) return;
 
-    setState(() => _importando = true);
+    setState(() => _operando = true);
     try {
       final file = File(result.files.single.path!);
-      final productosRebajados =
-          await DBHelperCajero.instance.importarCierreTurno(file);
+      final n = await DBHelperCajero.instance.importarCierreTurno(file);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Cierre importado: $productosRebajados producto(s) descontados ✓'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      _snack('Cierre importado: $n producto(s) descontados ✓',
+          color: Colors.green);
       await _cargarDatos();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _snack('Error: ${e.toString().replaceFirst('Exception: ', '')}',
+          color: Colors.red);
     } finally {
-      if (mounted) setState(() => _importando = false);
+      if (mounted) setState(() => _operando = false);
     }
+  }
+
+  void _snack(String msg, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hoy = DateTime.now();
-    final detalle = _resumen?['detalle'] as List<dynamic>? ?? [];
+    final hoy     = DateTime.now();
+    final detalle = _resumen?['detalle']   as List<dynamic>? ?? [];
     final hayVentas = (_resumen?['numeroVentas'] as int? ?? 0) > 0;
+    final porMetodo = _resumen?['porMetodo'] as List<dynamic>? ?? [];
+    final porMoneda = _resumen?['porMoneda'] as List<dynamic>? ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -133,39 +149,12 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Banner turno cerrado ──────────────────────────────
-                  if (_turnoCerrado)
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.lock_clock, color: Colors.orange),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Turno cerrado.',
-                              style: TextStyle(
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // ── Fecha ─────────────────────────────────────────────
+                  // ── Fecha ────────────────────────────────────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _formatoFecha.format(hoy),
+                        _fmtFecha.format(hoy),
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
@@ -175,12 +164,12 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                   ),
                   const Divider(height: 30),
 
-                  // ── Tarjetas resumen ──────────────────────────────────
+                  // ── Tarjetas totales ─────────────────────────────────
                   Row(
                     children: [
                       _buildCard(
-                        'Total Ventas',
-                        _formatoMoneda.format(_resumen?['totalVentas'] ?? 0),
+                        'Total Ventas (CUP)',
+                        _fmtMoneda.format(_resumen?['totalVentas'] ?? 0),
                         Icons.attach_money,
                         Colors.green,
                       ),
@@ -193,22 +182,46 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 20),
 
-                  // ── Detalle productos vendidos ────────────────────────
-                  const Text(
-                    'Productos Vendidos Hoy',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: primaryDark),
-                  ),
+                  // ── Desglose por método de pago ──────────────────────
+                  if (porMetodo.isNotEmpty) ...[
+                    const Text('Por método de pago',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: primaryDark)),
+                    const SizedBox(height: 8),
+                    ...porMetodo.map((m) => _metodoPagoRow(m)),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // ── Desglose por moneda ──────────────────────────────
+                  if (porMoneda.isNotEmpty) ...[
+                    const Text('Por moneda',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: primaryDark)),
+                    const SizedBox(height: 8),
+                    ...porMoneda.map((m) => _monedaRow(m)),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // ── Productos vendidos ───────────────────────────────
+                  const Text('Productos Vendidos Hoy',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: primaryDark)),
                   const SizedBox(height: 10),
                   detalle.isEmpty
                       ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
+                          padding: EdgeInsets.symmetric(vertical: 16),
                           child: Center(
-                              child: Text('No hay ventas registradas hoy')),
+                              child:
+                                  Text('No hay ventas registradas hoy',
+                                      style: TextStyle(color: Colors.grey))),
                         )
                       : ListView.builder(
                           shrinkWrap: true,
@@ -229,7 +242,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                                 subtitle: Text(
                                     'Cant: ${(item['cantidadTotal'] as num).toStringAsFixed(0)}'),
                                 trailing: Text(
-                                  _formatoMoneda.format(item['totalVendido']),
+                                  _fmtMoneda.format(item['totalVendido']),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold),
                                 ),
@@ -238,57 +251,14 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                           },
                         ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 24),
 
-                  // ── Botón exportar cierre ─────────────────────────────
+                  // ── Botón importar inventario ─────────────────────────
                   SizedBox(
                     width: double.infinity,
-                    height: 55,
+                    height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: (!hayVentas || _turnoCerrado || _importando)
-                          ? null
-                          : _exportarCierre,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryDark,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey.shade300,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: _importando
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-                            )
-                          : const Icon(Icons.share),
-                      label: Text(
-                        _importando ? 'EXPORTANDO...' : 'EXPORTAR CIERRE AL ADMIN',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      _turnoCerrado
-                          ? 'El cierre ya fue exportado hoy.'
-                          : 'Envía este archivo al Admin para actualizar el inventario.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 12),
-
-                  // ── Botón importar cierre de turno anterior ───────────────────────
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton.icon(
-                      onPressed: _importando ? null : _importarCierreTurno,
+                      onPressed: _operando ? null : _importarInventario,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1B7A84),
                         foregroundColor: Colors.white,
@@ -296,59 +266,236 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: _importando
+                      icon: _operando
                           ? const SizedBox(
-                              width: 18,
-                              height: 18,
+                              width: 18, height: 18,
                               child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download_for_offline_outlined),
+                                  color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.inventory_2_outlined),
                       label: Text(
-                        _importando ? 'IMPORTANDO...' : 'IMPORTAR CIERRE DE TURNO',
+                        _operando ? 'PROCESANDO...' : 'IMPORTAR INVENTARIO',
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold),
+                            fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   const Center(
                     child: Text(
-                      'Importa el cierre del turno anterior para actualizar tu inventario.',
+                      'Importa el archivo .gv del Admin para actualizar productos y stock.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                   ),
-                  const SizedBox(height: 20),
+
+                  const SizedBox(height: 12),
+
+                  // ── Botón exportar cierre ─────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: (!hayVentas || _operando) ? null : _exportarCierre,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryDark,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: _operando
+                          ? const SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.share),
+                      label: Text(
+                        _operando ? 'EXPORTANDO...' : 'EXPORTAR CIERRE AL ADMIN',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Center(
+                    child: Text(
+                      'Envía este archivo al Admin para actualizar el inventario.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // ── Botón importar cierre de turno anterior ───────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _operando ? null : _importarCierreTurno,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade700,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: _operando
+                          ? const SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.download_for_offline_outlined),
+                      label: Text(
+                        _operando ? 'IMPORTANDO...' : 'IMPORTAR CIERRE DE TURNO',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Center(
+                    child: Text(
+                      'Importa el cierre del turno anterior para descontar su stock.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildCard(
-      String titulo, String valor, IconData icono, Color color) {
+  Widget _metodoPagoRow(dynamic m) {
+    const iconos = {
+      'efectivo': Icons.payments_outlined,
+      'tarjeta':  Icons.credit_card_outlined,
+      'qr':       Icons.qr_code_outlined,
+    };
+    const colores = {
+      'efectivo': Colors.green,
+      'tarjeta':  Colors.blue,
+      'qr':       Colors.purple,
+    };
+    final metodo   = m['metodo_pago'] as String? ?? 'efectivo';
+    final totalCup = (m['totalCUP'] as num).toDouble();
+    final cant     = (m['cantidad'] as num).toInt();
+    final color    = colores[metodo] ?? Colors.grey;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(iconos[metodo] ?? Icons.attach_money, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _etiquetaMetodo(metodo),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Text('$cant venta${cant != 1 ? 's' : ''}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(width: 10),
+          Text(
+            _fmtMoneda.format(totalCup),
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: color,
+                fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monedaRow(dynamic m) {
+    final moneda     = m['moneda'] as String? ?? 'CUP';
+    final totalCup   = (m['totalCUP'] as num).toDouble();
+    final totalMon   = (m['totalMoneda'] as num).toDouble();
+    final tasa       = (m['tasa'] as num?)?.toDouble() ?? 1.0;
+    final cant       = (m['cantidad'] as num).toInt();
+    final emojis     = {'CUP': '🇨🇺', 'USD': '🇺🇸', 'EUR': '🇪🇺', 'CAD': '🇨🇦'};
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Text(emojis[moneda] ?? '💱', style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(moneda,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                if (moneda != 'CUP')
+                  Text(
+                    '${totalMon.toStringAsFixed(2)} $moneda · 1 $moneda = ${tasa.toStringAsFixed(0)} CUP',
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          Text('$cant',
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(width: 10),
+          Text(
+            _fmtMoneda.format(totalCup),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: primaryDark,
+                fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _etiquetaMetodo(String m) {
+    switch (m) {
+      case 'tarjeta': return 'Tarjeta';
+      case 'qr':      return 'QR / Transferencia';
+      default:        return 'Efectivo';
+    }
+  }
+
+  Widget _buildCard(String titulo, String valor, IconData icono, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: color.withAlpha(26),
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withAlpha(77)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icono, color: color),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(titulo,
                 style: TextStyle(
                     color: color,
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold)),
             Text(valor,
                 style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold)),
+                    fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
       ),

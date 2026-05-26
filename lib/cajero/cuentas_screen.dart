@@ -1,13 +1,4 @@
 // lib/vendedor/screens/cuentas_screen.dart
-//
-// Pantalla principal del modo restaurante/caja.
-// Reemplaza VentasScreen como tab 0 en VendedorScreen.
-//
-// Muestra la lista de cuentas abiertas y permite:
-//   • Crear nueva cuenta (pide nombre)
-//   • Entrar a una cuenta existente (agregar/quitar items, cobrar)
-//   • Cancelar una cuenta (devuelve stock)
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/cuenta_abierta.dart';
@@ -26,7 +17,6 @@ class CuentasScreenState extends State<CuentasScreen> {
 
   List<CuentaAbierta> _cuentas = [];
   bool _cargando = true;
-  bool _turnoCerrado = false;
 
   final _formatoMoneda =
       NumberFormat.currency(symbol: '\$', decimalDigits: 2, locale: 'es_MX');
@@ -39,14 +29,10 @@ class CuentasScreenState extends State<CuentasScreen> {
 
   Future<void> cargar() async {
     setState(() => _cargando = true);
-    final results = await Future.wait([
-      DBHelperCajero.instance.obtenerCuentasAbiertas(),
-      DBHelperCajero.instance.esTurnoCerrado(),
-    ]);
+    final cuentas = await DBHelperCajero.instance.obtenerCuentasAbiertas();
     if (!mounted) return;
     setState(() {
-      _cuentas = results[0] as List<CuentaAbierta>;
-      _turnoCerrado = results[1] as bool;
+      _cuentas  = cuentas;
       _cargando = false;
     });
   }
@@ -54,11 +40,6 @@ class CuentasScreenState extends State<CuentasScreen> {
   // ── Crear cuenta nueva ────────────────────────────────────────────────────
 
   Future<void> _nuevaCuenta() async {
-    if (_turnoCerrado) {
-      _mostrarTurnoCerrado();
-      return;
-    }
-
     final controller = TextEditingController();
     final nombre = await showDialog<String>(
       context: context,
@@ -96,7 +77,6 @@ class CuentasScreenState extends State<CuentasScreen> {
     final cuenta = await DBHelperCajero.instance.crearCuenta(nombre);
     if (!mounted) return;
 
-    // Ir directo a la cuenta recién creada
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -153,31 +133,6 @@ class CuentasScreenState extends State<CuentasScreen> {
     );
   }
 
-  void _mostrarTurnoCerrado() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.lock_clock, color: Colors.orange),
-          SizedBox(width: 8),
-          Text('Turno cerrado'),
-        ]),
-        content: const Text(
-          'No se pueden crear cuentas nuevas.\n'
-          'Ve a Cierre → Iniciar Nuevo Día para continuar.',
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: primaryDark, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Entendido'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
@@ -196,48 +151,19 @@ class CuentasScreenState extends State<CuentasScreen> {
       ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Banner turno cerrado
-                if (_turnoCerrado)
-                  Container(
-                    width: double.infinity,
-                    color: Colors.orange.shade50,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.lock_clock,
-                            color: Colors.orange, size: 16),
-                        SizedBox(width: 8),
-                        Text(
-                          'Turno cerrado — no se pueden crear cuentas nuevas',
-                          style: TextStyle(
-                              color: Colors.orange, fontSize: 12),
-                        ),
-                      ],
-                    ),
+          : _cuentas.isEmpty
+              ? _emptyState()
+              : RefreshIndicator(
+                  onRefresh: cargar,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _cuentas.length,
+                    itemBuilder: (context, i) => _cuentaCard(_cuentas[i]),
                   ),
-
-                // Lista de cuentas
-                Expanded(
-                  child: _cuentas.isEmpty
-                      ? _emptyState()
-                      : RefreshIndicator(
-                          onRefresh: cargar,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: _cuentas.length,
-                            itemBuilder: (context, i) =>
-                                _cuentaCard(_cuentas[i]),
-                          ),
-                        ),
                 ),
-              ],
-            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _nuevaCuenta,
-        backgroundColor: _turnoCerrado ? Colors.grey : primaryDark,
+        backgroundColor: primaryDark,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Nueva cuenta'),
@@ -290,10 +216,8 @@ class CuentasScreenState extends State<CuentasScreen> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Icono cuenta
               Container(
-                width: 46,
-                height: 46,
+                width: 46, height: 46,
                 decoration: BoxDecoration(
                   color: primaryDark.withAlpha(20),
                   borderRadius: BorderRadius.circular(10),
@@ -302,8 +226,6 @@ class CuentasScreenState extends State<CuentasScreen> {
                     color: primaryDark, size: 22),
               ),
               const SizedBox(width: 14),
-
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,8 +246,6 @@ class CuentasScreenState extends State<CuentasScreen> {
                   ],
                 ),
               ),
-
-              // Total + cancelar
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

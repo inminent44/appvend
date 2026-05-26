@@ -40,7 +40,7 @@ class DBHelperCajero {
 
     return await openDatabase(
       path,
-      version: 4, // Incrementar la versión de la base de datos
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
@@ -50,11 +50,18 @@ class DBHelperCajero {
             stockActual REAL NOT NULL DEFAULT 0
           )
         ''');
+        // ventas ahora incluye método de pago y moneda
         await db.execute('''
           CREATE TABLE ventas (
-            id_venta TEXT PRIMARY KEY,
-            fecha    TEXT NOT NULL,
-            total    REAL NOT NULL
+            id_venta       TEXT PRIMARY KEY,
+            fecha          TEXT NOT NULL,
+            total          REAL NOT NULL,
+            metodo_pago    TEXT NOT NULL DEFAULT 'efectivo',
+            moneda         TEXT NOT NULL DEFAULT 'CUP',
+            monto_moneda   REAL NOT NULL DEFAULT 0,
+            tasa_cambio    REAL NOT NULL DEFAULT 1,
+            ref_transaccion TEXT,
+            plataforma_qr  TEXT
           )
         ''');
         await db.execute('''
@@ -67,13 +74,6 @@ class DBHelperCajero {
             total       REAL NOT NULL,
             FOREIGN KEY (id_venta)    REFERENCES ventas (id_venta),
             FOREIGN KEY (producto_id) REFERENCES productos (id)
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE cierres_turno (
-            id      INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha   TEXT NOT NULL,
-            cerrado INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('''
@@ -109,6 +109,19 @@ class DBHelperCajero {
             fecha TEXT NOT NULL
           )
         ''');
+        // Tasas de cambio (todas respecto al CUP)
+        await db.execute('''
+          CREATE TABLE tasas_cambio (
+            moneda TEXT PRIMARY KEY,
+            tasa   REAL NOT NULL,
+            nombre TEXT NOT NULL
+          )
+        ''');
+        // Tasas por defecto
+        await db.insert('tasas_cambio', {'moneda': 'CUP', 'tasa': 1.0,    'nombre': 'Peso Cubano'});
+        await db.insert('tasas_cambio', {'moneda': 'USD', 'tasa': 300.0,  'nombre': 'Dólar USA'});
+        await db.insert('tasas_cambio', {'moneda': 'EUR', 'tasa': 330.0,  'nombre': 'Euro'});
+        await db.insert('tasas_cambio', {'moneda': 'CAD', 'tasa': 220.0,  'nombre': 'Dólar Canadiense'});
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -150,9 +163,69 @@ class DBHelperCajero {
             )
           ''');
         }
+        if (oldVersion < 5) {
+          // Migrar tabla ventas: agregar columnas de pago y moneda
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'efectivo'"); } catch (_) {}
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN moneda TEXT NOT NULL DEFAULT 'CUP'"); } catch (_) {}
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN monto_moneda REAL NOT NULL DEFAULT 0"); } catch (_) {}
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN tasa_cambio REAL NOT NULL DEFAULT 1"); } catch (_) {}
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN ref_transaccion TEXT"); } catch (_) {}
+          try { await db.execute("ALTER TABLE ventas ADD COLUMN plataforma_qr TEXT"); } catch (_) {}
+        }
+        if (oldVersion < 6) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS tasas_cambio (
+              moneda TEXT PRIMARY KEY,
+              tasa   REAL NOT NULL,
+              nombre TEXT NOT NULL
+            )
+          ''');
+          // Insertar tasas solo si no existen
+          final existing = await db.query('tasas_cambio');
+          if (existing.isEmpty) {
+            await db.insert('tasas_cambio', {'moneda': 'CUP', 'tasa': 1.0,    'nombre': 'Peso Cubano'});
+            await db.insert('tasas_cambio', {'moneda': 'USD', 'tasa': 300.0,  'nombre': 'Dólar USA'});
+            await db.insert('tasas_cambio', {'moneda': 'EUR', 'tasa': 330.0,  'nombre': 'Euro'});
+            await db.insert('tasas_cambio', {'moneda': 'CAD', 'tasa': 220.0,  'nombre': 'Dólar Canadiense'});
+          }
+          // Eliminar tabla cierres_turno si existía (ya no se usa)
+          try { await db.execute('DROP TABLE IF EXISTS cierres_turno'); } catch (_) {}
+        }
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
     );
+  }
+
+  // ─── TASAS DE CAMBIO ───────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> obtenerTasas() async {
+    final db = await database;
+    return db.query('tasas_cambio', orderBy: 'moneda ASC');
+  }
+
+  Future<void> actualizarTasa(String moneda, double tasa) async {
+    final db = await database;
+    await db.update(
+      'tasas_cambio',
+      {'tasa': tasa},
+      where: 'moneda = ?',
+      whereArgs: [moneda],
+    );
+  }
+
+  /// Retorna la tasa (CUP por unidad de moneda extranjera) de una moneda.
+  Future<double> obtenerTasa(String moneda) async {
+    if (moneda == 'CUP') return 1.0;
+    final db = await database;
+    final res = await db.query('tasas_cambio', where: 'moneda = ?', whereArgs: [moneda], limit: 1);
+    if (res.isEmpty) return 1.0;
+    return (res.first['tasa'] as num).toDouble();
+  }
+
+  /// Convierte monto de moneda extranjera a CUP usando la tasa actual.
+  Future<double> convertirACup(double monto, String moneda) async {
+    final tasa = await obtenerTasa(moneda);
+    return monto * tasa;
   }
 
   // ─── INVENTARIO ────────────────────────────────────────────────────────────
@@ -162,7 +235,6 @@ class DBHelperCajero {
     return db.query('productos', orderBy: 'nombre ASC');
   }
 
-  /// Devuelve true si este inventario ya fue importado antes (mismo contenido).
   Future<bool> inventarioYaImportado(String contenido) async {
     final db   = await database;
     final hash = contenido.length > 64 ? contenido.substring(0, 64) : contenido;
@@ -188,6 +260,7 @@ class DBHelperCajero {
 
   // ─── VENTAS ────────────────────────────────────────────────────────────────
 
+  /// Realiza una venta con soporte de método de pago y moneda.
   Future<void> realizarVenta(Venta venta, List<DetalleVenta> detalles) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -224,8 +297,7 @@ class DBHelperCajero {
     });
   }
 
-  Future<List<Map<String, dynamic>>> obtenerDetallesDeVenta(
-      String idVenta) async {
+  Future<List<Map<String, dynamic>>> obtenerDetallesDeVenta(String idVenta) async {
     final db = await database;
     return db.rawQuery('''
       SELECT dv.*, p.nombre
@@ -274,46 +346,7 @@ class DBHelperCajero {
     });
   }
 
-  // ─── TURNO ─────────────────────────────────────────────────────────────────
-
-  Future<bool> esTurnoCerrado() async {
-    final db  = await database;
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final res = await db.query('cierres_turno',
-        where: 'fecha = ? AND cerrado = 1', whereArgs: [hoy], limit: 1);
-    return res.isNotEmpty;
-  }
-
-  /// Devuelve la fecha en que se cerró el turno, o null si no hay cierre.
-  Future<String?> obtenerFechaCierreTurno() async {
-    final db  = await database;
-    final res = await db.query(
-      'cierres_turno',
-      where:   'cerrado = 1',
-      orderBy: 'id DESC',
-      limit:   1,
-    );
-    if (res.isEmpty) return null;
-    return res.first['fecha'] as String?;
-  }
-
-  Future<void> cerrarTurno() async {
-    final db  = await database;
-    final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    await db.insert('cierres_turno', {'fecha': hoy, 'cerrado': 1},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<void> iniciarNuevoDia() async {
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn.delete('detalle_venta');
-      await txn.delete('ventas');
-      await txn.delete('cierres_turno');
-    });
-  }
-
-  // ─── CIERRE DE CAJA ────────────────────────────────────────────────────────
+  // ─── RESUMEN CIERRE (con desglose por moneda y método) ────────────────────
 
   Future<Map<String, dynamic>> obtenerResumenCierre() async {
     final db  = await database;
@@ -324,6 +357,27 @@ class DBHelperCajero {
       'FROM ventas WHERE fecha = ?',
       [hoy],
     );
+
+    // Desglose por método de pago (total en CUP)
+    final porMetodo = await db.rawQuery('''
+      SELECT metodo_pago,
+             COALESCE(SUM(total), 0) AS totalCUP,
+             COUNT(*) AS cantidad
+      FROM ventas WHERE fecha = ?
+      GROUP BY metodo_pago
+    ''', [hoy]);
+
+    // Desglose por moneda (monto en moneda original + equivalente CUP)
+    final porMoneda = await db.rawQuery('''
+      SELECT moneda,
+             COALESCE(SUM(monto_moneda), 0) AS totalMoneda,
+             COALESCE(SUM(total), 0) AS totalCUP,
+             COUNT(*) AS cantidad,
+             MAX(tasa_cambio) AS tasa
+      FROM ventas WHERE fecha = ?
+      GROUP BY moneda
+    ''', [hoy]);
+
     final detalle = await db.rawQuery('''
       SELECT p.nombre, SUM(dv.cantidad) AS cantidadTotal, SUM(dv.total) AS totalVendido
       FROM detalle_venta dv
@@ -337,10 +391,13 @@ class DBHelperCajero {
       'totalVentas':  (totales.first['totalVentas']  as num).toDouble(),
       'numeroVentas': (totales.first['numeroVentas'] as num).toInt(),
       'detalle':      detalle,
+      'porMetodo':    porMetodo,
+      'porMoneda':    porMoneda,
     };
   }
 
-  /// Exporta el cierre incluyendo el número de dispositivo en el nombre del archivo.
+  // ─── EXPORTAR CIERRE ───────────────────────────────────────────────────────
+
   Future<void> exportarCierreCaja() async {
     final db  = await database;
     final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -362,14 +419,14 @@ class DBHelperCajero {
       builder.element('Ventas', nest: () {
         for (var v in ventas) {
           builder.element('Venta', nest: () {
-            v.forEach((k, val) => builder.element(k, nest: val.toString()));
+            v.forEach((k, val) => builder.element(k, nest: val?.toString() ?? ''));
           });
         }
       });
       builder.element('Detalles', nest: () {
         for (var d in detalles) {
           builder.element('Detalle', nest: () {
-            d.forEach((k, v) => builder.element(k, nest: v.toString()));
+            d.forEach((k, v) => builder.element(k, nest: v?.toString() ?? ''));
           });
         }
       });
@@ -383,7 +440,6 @@ class DBHelperCajero {
         '${directory.path}/cierre_${fechaStr}_$codigoDispositivo.gv');
     await file.writeAsString(encrypted.base64);
 
-    await cerrarTurno();
     await Share.shareXFiles(
         [XFile(file.path)], text: 'Cierre $hoy — $codigoDispositivo');
   }
@@ -444,7 +500,6 @@ class DBHelperCajero {
 
   // ─── CUENTAS ABIERTAS ──────────────────────────────────────────────────────
 
-  /// Lista todas las cuentas abiertas con sus items.
   Future<List<CuentaAbierta>> obtenerCuentasAbiertas() async {
     final db      = await database;
     final cuentas = await db.query('cuentas_abiertas', orderBy: 'abierta_en ASC');
@@ -460,7 +515,6 @@ class DBHelperCajero {
     return result;
   }
 
-  /// Crea una cuenta vacía. Devuelve la cuenta creada.
   Future<CuentaAbierta> crearCuenta(String nombre) async {
     final db     = await database;
     final cuenta = CuentaAbierta(
@@ -473,8 +527,6 @@ class DBHelperCajero {
     return cuenta;
   }
 
-  /// Agrega un item a la cuenta y descuenta stock inmediatamente.
-  /// Lanza excepción si no hay stock suficiente.
   Future<void> agregarItemCuenta({
     required String cuentaId,
     required int    productoId,
@@ -484,7 +536,6 @@ class DBHelperCajero {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      // Verificar stock disponible
       final stockRes = await txn.query(
         'productos',
         columns:   ['stockActual'],
@@ -499,7 +550,6 @@ class DBHelperCajero {
             'Stock insuficiente (disponible: ${stock.toStringAsFixed(0)})');
       }
 
-      // Ver si ya existe ese producto en la cuenta → sumar cantidad
       final existing = await txn.query(
         'items_cuenta',
         where:     'cuenta_id = ? AND producto_id = ?',
@@ -526,7 +576,6 @@ class DBHelperCajero {
         });
       }
 
-      // Descontar stock
       await txn.rawUpdate(
         'UPDATE productos SET stockActual = stockActual - ? WHERE id = ?',
         [cantidad, productoId],
@@ -534,7 +583,6 @@ class DBHelperCajero {
     });
   }
 
-  /// Quita una unidad de un item. Si llega a 0, elimina el item y devuelve stock.
   Future<void> quitarItemCuenta({
     required String cuentaId,
     required int    productoId,
@@ -568,7 +616,6 @@ class DBHelperCajero {
         );
       }
 
-      // Devolver stock
       await txn.rawUpdate(
         'UPDATE productos SET stockActual = stockActual + ? WHERE id = ?',
         [cantQuitar, productoId],
@@ -576,21 +623,34 @@ class DBHelperCajero {
     });
   }
 
-  /// Cobra la cuenta: la convierte en Venta+DetalleVenta y la elimina.
-  /// El stock ya fue descontado al agregar — aquí solo se registra la venta.
-  Future<void> cobrarCuenta(CuentaAbierta cuenta) async {
+  /// Cobra la cuenta con método de pago y moneda.
+  Future<void> cobrarCuenta(
+    CuentaAbierta cuenta, {
+    String metodoPago = 'efectivo',
+    String moneda = 'CUP',
+    double? montoMoneda,
+    double tasaCambio = 1.0,
+    String? refTransaccion,
+    String? plataformaQr,
+  }) async {
     final db      = await database;
     final idVenta = const Uuid().v4();
     final fecha   = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final monto   = montoMoneda ?? cuenta.total;
 
     await db.transaction((txn) async {
       await txn.insert('ventas', {
-        'id_venta': idVenta,
-        'fecha':    fecha,
-        'total':    cuenta.total,
+        'id_venta':        idVenta,
+        'fecha':           fecha,
+        'total':           cuenta.total,
+        'metodo_pago':     metodoPago,
+        'moneda':          moneda,
+        'monto_moneda':    monto,
+        'tasa_cambio':     tasaCambio,
+        'ref_transaccion': refTransaccion,
+        'plataforma_qr':   plataformaQr,
       });
 
-      // Stock YA descontado al agregar — solo insertar detalles
       for (final item in cuenta.items) {
         await txn.insert('detalle_venta', {
           'id_detalle':  const Uuid().v4(),
@@ -615,7 +675,6 @@ class DBHelperCajero {
     });
   }
 
-  /// Cancela la cuenta y DEVUELVE todo el stock.
   Future<void> cancelarCuenta(CuentaAbierta cuenta) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -638,7 +697,6 @@ class DBHelperCajero {
     });
   }
 
-  /// Carga una cuenta con sus items actualizados desde la BD.
   Future<CuentaAbierta?> recargarCuenta(String cuentaId) async {
     final db = await database;
     final cuentas = await db.query(
@@ -655,17 +713,12 @@ class DBHelperCajero {
     );
     return CuentaAbierta.fromMap(cuentas.first, items);
   }
-    // ─── IMPORTAR CIERRE DE TURNO ─────────────────────────────────────────────
-  // Permite que el cajero del turno siguiente descuente del stock
-  // los productos que vendió el cajero del turno anterior.
 
-// solo para claridad
+  // ─── IMPORTAR CIERRE DE TURNO (conservado por compatibilidad) ─────────────
 
   Future<bool> cierreTurnoYaImportado(String contenido) async {
     final db = await database;
-    final hash = contenido.length > 64
-        ? contenido.substring(0, 64)
-        : contenido;
+    final hash = contenido.length > 64 ? contenido.substring(0, 64) : contenido;
     final res = await db.query(
       'cierres_turno_importados',
       where: 'hash = ?',
@@ -677,9 +730,7 @@ class DBHelperCajero {
 
   Future<void> _registrarCierreTurnoImportado(String contenido) async {
     final db = await database;
-    final hash = contenido.length > 64
-        ? contenido.substring(0, 64)
-        : contenido;
+    final hash = contenido.length > 64 ? contenido.substring(0, 64) : contenido;
     final fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
     await db.insert(
       'cierres_turno_importados',
@@ -688,27 +739,17 @@ class DBHelperCajero {
     );
   }
 
-  /// Importa el cierre `.gv` del turno anterior y descuenta el stock.
-  /// Devuelve el número de productos procesados.
-  /// Lanza [Exception] si el archivo ya fue importado o tiene formato incorrecto.
   Future<int> importarCierreTurno(File archivo) async {
     final contenido = await archivo.readAsString();
-
-    // ── 1. Verificar duplicado ────────────────────────────────────────────
     if (await cierreTurnoYaImportado(contenido)) {
       throw Exception('Este cierre ya fue importado anteriormente.');
     }
-
-    // ── 2. Desencriptar y parsear XML ─────────────────────────────────────
     final xmlString = _encrypter.decrypt(
       enc.Encrypted.fromBase64(contenido),
       iv: _iv,
     );
     final document = XmlDocument.parse(xmlString);
-
-    // ── 3. Acumular cantidades vendidas por producto ───────────────────────
     final Map<int, double> cantidadesPorProducto = {};
-
     for (final detalle in document.findAllElements('Detalle')) {
       final data = _xmlElementToMap(detalle);
       final productoId = int.tryParse(data['producto_id'].toString());
@@ -717,14 +758,9 @@ class DBHelperCajero {
       cantidadesPorProducto[productoId] =
           (cantidadesPorProducto[productoId] ?? 0.0) + cantidad;
     }
-
     if (cantidadesPorProducto.isEmpty) {
-      throw Exception(
-        'El archivo no contiene ventas o tiene un formato incorrecto.',
-      );
+      throw Exception('El archivo no contiene ventas o tiene un formato incorrecto.');
     }
-
-    // ── 4. Descontar stock — productos inexistentes se ignoran ────────────
     final db = await database;
     await db.transaction((txn) async {
       for (final entry in cantidadesPorProducto.entries) {
@@ -735,10 +771,9 @@ class DBHelperCajero {
         ''', [entry.value, entry.key]);
       }
     });
-
-    // ── 5. Registrar para evitar duplicados ───────────────────────────────
     await _registrarCierreTurnoImportado(contenido);
-
     return cantidadesPorProducto.length;
   }
+
+  esTurnoCerrado() {}
 }
