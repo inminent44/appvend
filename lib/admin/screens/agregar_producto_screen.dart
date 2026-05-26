@@ -442,7 +442,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                                 decimal: true, signed: true),
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
-                              RegExp(r'[-\d,.]'))
+                              RegExp(r'^-?\d*[,.]?\d*'))
                         ],
                         decoration: InputDecoration(
                           labelText: _esEdicion
@@ -453,10 +453,25 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                               Icons.layers_outlined,
                               color: primaryDark, size: 20),
                           helperText: _esEdicion
-                              ? 'Usa negativo para reducir stock'
-                              : 'Opcional — puedes dejarlo en 0',
+                              ? 'Usa negativo para reducir stock. Deja en 0 para no ajustar.'
+                              : 'La cantidad inicial no puede ser cero.',
                         ),
-                        // No requerido
+                        validator: (v) {
+                          if (_esEdicion) {
+                            return null;
+                          }
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Ingresa la cantidad inicial';
+                          }
+                          final valor = double.tryParse(v.trim().replaceAll(',', '.'));
+                          if (valor == null) {
+                            return 'Número inválido';
+                          }
+                          if (valor == 0) {
+                            return 'La cantidad no puede ser cero';
+                          }
+                          return null;
+                        },
                       ),
                     ),
 
