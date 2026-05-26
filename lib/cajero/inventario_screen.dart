@@ -12,6 +12,8 @@ class InventarioScreen extends StatefulWidget {
 
 class _InventarioScreenState extends State<InventarioScreen> {
   static const Color primaryDark = Color(0xFF084B53);
+  static const int _limiteMaximo = 300;
+  static const int _limiteAdvertencia = 295;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -218,10 +220,69 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildBannerTotal() {
     final total = _productos.length;
+    if (total >= _limiteMaximo) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.red.shade200),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.lock_outline, color: Colors.red, size: 18),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Límite de 300 productos alcanzado. Contacta a VaraNova para la versión Básica Plus.',
+                style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (total >= _limiteAdvertencia) {
+      final restantes = _limiteMaximo - total;
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: Colors.orange, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Casi en el límite: $total/300 productos. '
+                '${restantes == 1 ? 'Solo queda 1 lugar.' : 'Quedan $restantes lugares.'}',
+                style: const TextStyle(
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Text(
-        '$total productos en inventario',
+        '$total / $_limiteMaximo productos',
         style: const TextStyle(color: Colors.grey, fontSize: 12),
       ),
     );

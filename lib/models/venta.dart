@@ -2,11 +2,13 @@ class Venta {
   final String idVenta;
   final String fecha;
   final double total;
+  final String? metodoPago;
 
   const Venta({
     required this.idVenta,
     required this.fecha,
     required this.total,
+    this.metodoPago,
   });
 
   factory Venta.fromMap(Map<String, dynamic> map) {
@@ -14,6 +16,7 @@ class Venta {
       idVenta: map['id_venta'] as String,
       fecha: map['fecha'] as String,
       total: (map['total'] as num).toDouble(),
+      metodoPago: map['metodo_pago'] as String?,
     );
   }
 
@@ -21,10 +24,11 @@ class Venta {
         'id_venta': idVenta,
         'fecha': fecha,
         'total': total,
+        'metodo_pago': metodoPago,
       };
 
   @override
-  String toString() => 'Venta(idVenta: $idVenta, fecha: $fecha, total: $total)';
+  String toString() => 'Venta(idVenta: $idVenta, fecha: $fecha, total: $total, metodoPago: $metodoPago)';
 }
 
 class DetalleVenta {

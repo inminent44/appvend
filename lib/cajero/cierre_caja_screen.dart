@@ -21,7 +21,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
   Map<String, dynamic>? _resumen;
   bool _cargando = false;
   bool _turnoCerrado = false;
-  bool _importando = false; // Nueva variable de estado
+  bool _importando = false;
 
   @override
   void initState() {
@@ -67,7 +67,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
         SnackBar(content: Text('Error al exportar: $e')),
       );
     } finally {
-      if(mounted) {
+      if (mounted) {
         setState(() => _importando = false);
       }
     }
@@ -133,7 +133,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Banner turno cerrado ──────────────────────────────
+                  // Banner de turno cerrado
                   if (_turnoCerrado)
                     Container(
                       width: double.infinity,
@@ -160,7 +160,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                       ),
                     ),
 
-                  // ── Fecha ─────────────────────────────────────────────
+                  // Fecha
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -175,7 +175,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                   ),
                   const Divider(height: 30),
 
-                  // ── Tarjetas resumen ──────────────────────────────────
+                  // Cards de totales
                   Row(
                     children: [
                       _buildCard(
@@ -193,9 +193,21 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
+
+                  // Sección métodos de pago
+                  const Text(
+                    'Ventas por Método de Pago',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: primaryDark),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildMetodosPagoResumen(),
                   const SizedBox(height: 30),
 
-                  // ── Detalle productos vendidos ────────────────────────
+                  // Productos vendidos
                   const Text(
                     'Productos Vendidos Hoy',
                     style: TextStyle(
@@ -240,7 +252,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
 
                   const SizedBox(height: 30),
 
-                  // ── Botón exportar cierre ─────────────────────────────
+                  // Botón exportar
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -259,7 +271,8 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 3, color: Colors.white),
                             )
                           : const Icon(Icons.share),
                       label: Text(
@@ -283,7 +296,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                   const Divider(),
                   const SizedBox(height: 12),
 
-                  // ── Botón importar cierre de turno anterior ───────────────────────
+                  // Botón importar cierre de turno anterior
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -323,6 +336,67 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  // Widget que muestra los totales por método de pago (Efectivo, Tarjeta, QR)
+  Widget _buildMetodosPagoResumen() {
+    // Leer el mapa que devuelve obtenerResumenCierre() → 'totalesPorMetodo'
+    final totalesMetodo =
+        _resumen?['totalesPorMetodo'] as Map<String, dynamic>? ?? {};
+    final hayVentas = (_resumen?['numeroVentas'] as int? ?? 0) > 0;
+
+    if (!hayVentas) return const SizedBox.shrink();
+
+    const Map<String, IconData> iconos = {
+      'Efectivo': Icons.money_rounded,
+      'Tarjeta': Icons.credit_card,
+      'QR': Icons.qr_code_2,
+    };
+
+    // Orden fijo: Efectivo primero, luego Tarjeta, luego QR
+    const metodosOrdenados = ['Efectivo', 'Tarjeta', 'QR'];
+
+    final tiles = metodosOrdenados
+        .where((m) =>
+            totalesMetodo.containsKey(m) &&
+            (totalesMetodo[m] as num) > 0)
+        .map((metodo) {
+      final total = totalesMetodo[metodo] as num;
+      return ListTile(
+        leading: Icon(iconos[metodo] ?? Icons.payment,
+            color: primaryDark, size: 28),
+        title: Text(metodo,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 15)),
+        trailing: Text(
+          _formatoMoneda.format(total),
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+      );
+    }).toList();
+
+    if (tiles.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: Text('No se registraron métodos de pago')),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: ListTile.divideTiles(
+          context: context,
+          tiles: tiles,
+        ).toList(),
+      ),
     );
   }
 

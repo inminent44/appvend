@@ -104,7 +104,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           setState(() { _cargando = false; _idDuplicado = true; });
           return;
         }
-        if (actuales.length >= 150) {
+        if (actuales.length >= 300) {
           setState(() => _cargando = false);
           if (!mounted) return;
           _mostrarAlertaLimite();
@@ -243,7 +243,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           const SizedBox(width: 12),
           const Text('Límite alcanzado', style: TextStyle(fontSize: 17)),
         ]),
-        content: const Text('Has alcanzado el límite de 150 productos.\n'
+        content: const Text('Has alcanzado el límite de 300 productos.\n'
             'Contacta a VaraNova para obtener más capacidad.'),
         actions: [
           ElevatedButton(

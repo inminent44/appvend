@@ -1,4 +1,3 @@
-// lib/screens/cuenta_detalle_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -14,7 +13,6 @@ class CuentaDetalleScreen extends StatefulWidget {
 }
 
 class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
-  // ── Colores ───────────────────────────────────────────────────────────────
   static const Color primaryDark = Color(0xFF084B53);
   static const Color primaryMid = Color(0xFF0A6B77);
   static const Color bgPage = Color(0xFFF4F6F8);
@@ -46,7 +44,6 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     });
   }
 
-  // ── Agregar producto ──────────────────────────────────────────────────────
   Future<void> _mostrarSelector() async {
     await showModalBottomSheet(
       context: context,
@@ -91,8 +88,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     await _cargar();
   }
 
-  Future<void> _sumarItem(ItemCuenta item) async {
-    // Buscar el producto real para respetar el stock actual
+  Future<void> _sumarItem(ItemCuenta item) {
     final prod = _productos.firstWhere(
       (p) => p['id'] == item.productoId,
       orElse: () => {},
@@ -102,27 +98,28 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
         content: Text('Sin stock disponible'),
         backgroundColor: Colors.red,
       ));
-      return;
+      return Future.value();
     }
-    await _agregarProducto(prod, 1);
+    return _agregarProducto(prod, 1);
   }
 
-  // ── Cobrar ────────────────────────────────────────────────────────────────
   Future<void> _cobrar() async {
     if (_cuenta == null || _cuenta!.items.isEmpty) return;
 
-    final confirmar = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _TicketCobro(cuenta: _cuenta!, fmt: _fmt),
     );
 
-    if (confirmar != true || !mounted) return;
+    if (result == null || result['confirmado'] != true || !mounted) return;
+
+    final metodoPago = result['metodo'] as String;
 
     setState(() => _cobrando = true);
     try {
-      await DBHelperCajero.instance.cobrarCuenta(_cuenta!);
+      await DBHelperCajero.instance.cobrarCuenta(_cuenta!, metodoPago);
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -145,7 +142,6 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     }
   }
 
-  // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (_cargando) {
@@ -155,8 +151,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     }
     if (_cuenta == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Cuenta'), backgroundColor: primaryDark,
-            foregroundColor: Colors.white),
+        appBar: AppBar(title: const Text('Cuenta'), backgroundColor: primaryDark, foregroundColor: Colors.white),
         body: const Center(child: Text('Cuenta no encontrada')),
       );
     }
@@ -165,10 +160,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       backgroundColor: bgPage,
       body: Column(
         children: [
-          // ── Header ──────────────────────────────────────────────────
           _buildHeader(),
-
-          // ── Lista de items ───────────────────────────────────────────
           Expanded(
             child: _cuenta!.items.isEmpty
                 ? _emptyState()
@@ -178,29 +170,19 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
                     itemBuilder: (_, i) => _itemCard(_cuenta!.items[i], i),
                   ),
           ),
-
-          // ── Footer total + cobrar ────────────────────────────────────
           _buildFooter(),
         ],
       ),
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader() {
-    final minutos =
-        DateTime.now().difference(_cuenta!.abiertaEn).inMinutes;
-    final tiempoStr = minutos < 60
-        ? '$minutos min'
-        : '${(minutos / 60).floor()}h ${minutos % 60}min';
+    final minutos = DateTime.now().difference(_cuenta!.abiertaEn).inMinutes;
+    final tiempoStr = minutos < 60 ? '$minutos min' : '${(minutos / 60).floor()}h ${minutos % 60}min';
 
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryDark, primaryMid],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: LinearGradient(colors: [primaryDark, primaryMid], begin: Alignment.topLeft, end: Alignment.bottomRight),
       ),
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 8,
@@ -210,12 +192,10 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       ),
       child: Column(
         children: [
-          // Fila superior: back + nombre + agregar
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 20),
+                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
               Expanded(
@@ -224,60 +204,43 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
                   children: [
                     Text(
                       _cuenta!.nombre,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     Text(
                       'Abierta hace $tiempoStr',
-                      style: const TextStyle(
-                          color: Colors.white60, fontSize: 12),
+                      style: const TextStyle(color: Colors.white60, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              // Botón agregar producto
               GestureDetector(
                 onTap: _mostrarSelector,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.white.withAlpha(46),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: Colors.white.withAlpha(77)),
+                    border: Border.all(color: Colors.white.withAlpha(77)),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.add, color: Colors.white, size: 18),
                       SizedBox(width: 4),
-                      Text('Agregar',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold)),
+                      Text('Agregar', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Fila stats: items · total
           Row(
             children: [
               const SizedBox(width: 16),
-              _statChip(
-                  Icons.shopping_bag_outlined,
-                  '${_cuenta!.items.length} producto${_cuenta!.items.length != 1 ? 's' : ''}'),
+              _statChip(Icons.shopping_bag_outlined, '${_cuenta!.items.length} producto${_cuenta!.items.length != 1 ? 's' : ''}'),
               const SizedBox(width: 10),
-              _statChip(Icons.attach_money,
-                  _fmt.format(_cuenta!.total)),
+              _statChip(Icons.attach_money, _fmt.format(_cuenta!.total)),
             ],
           ),
         ],
@@ -288,33 +251,20 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
   Widget _statChip(IconData icon, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(30),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withAlpha(30), borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: Colors.white70, size: 14),
           const SizedBox(width: 5),
-          Text(label,
-              style:
-                  const TextStyle(color: Colors.white, fontSize: 12)),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
         ],
       ),
     );
   }
 
-  // ── Item card ─────────────────────────────────────────────────────────────
   Widget _itemCard(ItemCuenta item, int index) {
-    final colores = [
-      const Color(0xFF084B53),
-      const Color(0xFFE53935),
-      const Color(0xFFF57C00),
-      const Color(0xFF7B1FA2),
-      const Color(0xFF1565C0),
-      const Color(0xFF2E7D32),
-    ];
+    final colores = [const Color(0xFF084B53), const Color(0xFFE53935), const Color(0xFFF57C00), const Color(0xFF7B1FA2), const Color(0xFF1565C0), const Color(0xFF2E7D32)];
     final color = colores[index % colores.length];
 
     return Container(
@@ -322,100 +272,45 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withAlpha(13),
-              blurRadius: 8,
-              offset: const Offset(0, 3)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 8, offset: const Offset(0, 3))],
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            // Letra / ícono
             Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withAlpha(26),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  item.nombre.substring(0, 1).toUpperCase(),
-                  style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18),
-                ),
-              ),
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: color.withAlpha(26), borderRadius: BorderRadius.circular(12)),
+              child: Center(child: Text(item.nombre.substring(0, 1).toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18))),
             ),
             const SizedBox(width: 12),
-
-            // Nombre + precio unitario
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.nombre,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Color(0xFF1A1A2E))),
+                  Text(item.nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1A1A2E))),
                   const SizedBox(height: 2),
-                  Text('${_fmt.format(item.precio)} c/u',
-                      style: TextStyle(
-                          color: Colors.grey.shade500, fontSize: 12)),
+                  Text('${_fmt.format(item.precio)} c/u', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                 ],
               ),
             ),
-
-            // Controles cantidad
             Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F6F8),
-                borderRadius: BorderRadius.circular(30),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFFF4F6F8), borderRadius: BorderRadius.circular(30)),
               child: Row(
                 children: [
-                  _circleBtn(
-                    icon: Icons.remove,
-                    color: Colors.red.shade400,
-                    onTap: () => _quitarItem(item),
-                  ),
+                  _circleBtn(icon: Icons.remove, color: Colors.red.shade400, onTap: () => _quitarItem(item)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(
-                      item.cantidad.toStringAsFixed(0),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Color(0xFF1A1A2E)),
-                    ),
+                    child: Text(item.cantidad.toStringAsFixed(0), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1A1A2E))),
                   ),
-                  _circleBtn(
-                    icon: Icons.add,
-                    color: primaryDark,
-                    onTap: () => _sumarItem(item),
-                  ),
+                  _circleBtn(icon: Icons.add, color: primaryDark, onTap: () => _sumarItem(item)),
                 ],
               ),
             ),
-
             const SizedBox(width: 12),
-
-            // Subtotal
             SizedBox(
               width: 68,
-              child: Text(
-                _fmt.format(item.subtotal),
-                textAlign: TextAlign.end,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: primaryDark),
-              ),
+              child: Text(_fmt.format(item.subtotal), textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryDark)),
             ),
           ],
         ),
@@ -423,83 +318,47 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     );
   }
 
-  Widget _circleBtn(
-      {required IconData icon,
-      required Color color,
-      required VoidCallback onTap}) {
+  Widget _circleBtn({required IconData icon, required Color color, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: color.withAlpha(30),
-          shape: BoxShape.circle,
-        ),
+        width: 32, height: 32,
+        decoration: BoxDecoration(color: color.withAlpha(30), shape: BoxShape.circle),
         child: Icon(icon, color: color, size: 16),
       ),
     );
   }
 
-  // ── Footer ────────────────────────────────────────────────────────────────
   Widget _buildFooter() {
     final hayItems = _cuenta!.items.isNotEmpty;
     return Container(
-      padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withAlpha(18),
-              blurRadius: 16,
-              offset: const Offset(0, -4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(18), blurRadius: 16, offset: const Offset(0, -4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Desglose rápido si hay items
           if (hayItems) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${_cuenta!.cantidadItems} unidad${_cuenta!.cantidadItems != 1 ? 'es' : ''}',
-                  style: TextStyle(
-                      color: Colors.grey.shade500, fontSize: 13),
-                ),
-                Text(
-                  '${_cuenta!.items.length} concepto${_cuenta!.items.length != 1 ? 's' : ''}',
-                  style: TextStyle(
-                      color: Colors.grey.shade500, fontSize: 13),
-                ),
+                Text('${_cuenta!.cantidadItems} unidad${_cuenta!.cantidadItems != 1 ? 'es' : ''}', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                Text('${_cuenta!.items.length} concepto${_cuenta!.items.length != 1 ? 's' : ''}', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
               ],
             ),
             const SizedBox(height: 8),
             const Divider(height: 1),
             const SizedBox(height: 12),
           ],
-          // Total + botón
           Row(
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('TOTAL',
-                      style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1)),
-                  Text(
-                    _fmt.format(_cuenta!.total),
-                    style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A1A2E),
-                        height: 1.1),
-                  ),
+                  const Text('TOTAL', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  Text(_fmt.format(_cuenta!.total), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E), height: 1.1)),
                 ],
               ),
               const SizedBox(width: 16),
@@ -508,29 +367,20 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
                   height: 54,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          hayItems ? primaryDark : Colors.grey.shade300,
+                      backgroundColor: hayItems ? primaryDark : Colors.grey.shade300,
                       foregroundColor: Colors.white,
                       elevation: hayItems ? 3 : 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: (_cobrando || !hayItems) ? null : _cobrar,
                     child: _cobrando
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2.5))
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
                         : const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(Icons.payments_outlined, size: 20),
                               SizedBox(width: 8),
-                              Text('Cobrar',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold)),
+                              Text('Cobrar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             ],
                           ),
                   ),
@@ -543,45 +393,29 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
   Widget _emptyState() {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: primaryDark.withAlpha(18),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.add_shopping_cart_outlined,
-                size: 36, color: primaryDark),
+            width: 80, height: 80,
+            decoration: BoxDecoration(color: primaryDark.withAlpha(18), shape: BoxShape.circle),
+            child: const Icon(Icons.add_shopping_cart_outlined, size: 36, color: primaryDark),
           ),
           const SizedBox(height: 16),
-          const Text('Cuenta vacía',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A2E))),
+          const Text('Cuenta vacía', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
           const SizedBox(height: 8),
-          Text('Toca "Agregar" para añadir productos',
-              style: TextStyle(
-                  color: Colors.grey.shade500, fontSize: 13)),
+          Text('Toca "Agregar" para añadir productos', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: primaryDark,
-              foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+              backgroundColor: primaryDark, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             icon: const Icon(Icons.add),
-            label: const Text('Agregar producto',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Agregar producto', style: TextStyle(fontWeight: FontWeight.bold)),
             onPressed: _mostrarSelector,
           ),
         ],
@@ -589,10 +423,6 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Sheet selector de productos
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _ProductoSheet extends StatefulWidget {
   final List<Map<String, dynamic>> productos;
@@ -611,15 +441,12 @@ class _ProductoSheetState extends State<_ProductoSheet> {
   List<Map<String, dynamic>> _filtrados = [];
   final Set<int> _agregando = {};
 
-  final _fmt =
-      NumberFormat.currency(symbol: '\$', decimalDigits: 0, locale: 'es_MX');
+  final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0, locale: 'es_MX');
 
   @override
   void initState() {
     super.initState();
-    _filtrados = widget.productos
-        .where((p) => (p['stockActual'] as num).toDouble() > 0)
-        .toList();
+    _filtrados = widget.productos.where((p) => (p['stockActual'] as num).toDouble() > 0).toList();
   }
 
   @override
@@ -630,14 +457,7 @@ class _ProductoSheetState extends State<_ProductoSheet> {
 
   void _filtrar(String q) {
     setState(() {
-      _filtrados = widget.productos
-          .where((p) =>
-              (p['stockActual'] as num).toDouble() > 0 &&
-              p['nombre']
-                  .toString()
-                  .toLowerCase()
-                  .contains(q.toLowerCase()))
-          .toList();
+      _filtrados = widget.productos.where((p) => (p['stockActual'] as num).toDouble() > 0 && p['nombre'].toString().toLowerCase().contains(q.toLowerCase())).toList();
     });
   }
 
@@ -656,65 +476,37 @@ class _ProductoSheetState extends State<_ProductoSheet> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.82,
-      ),
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.82),
       child: Column(
         children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 4),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2)),
-          ),
-
-          // Título
+          Container(margin: const EdgeInsets.only(top: 12, bottom: 4), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('Agregar producto',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
-                    color: Color(0xFF1A1A2E))),
+            child: Text('Agregar producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Color(0xFF1A1A2E))),
           ),
-
-          // Buscador
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: TextField(
-              controller: _searchCtrl,
-              autofocus: true,
+              controller: _searchCtrl, autofocus: true,
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
                 prefixIcon: const Icon(Icons.search, size: 20),
-                filled: true,
-                fillColor: const Color(0xFFF4F6F8),
-                border: OutlineInputBorder(
-                  borderSide: BorderSide.none,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                filled: true, fillColor: const Color(0xFFF4F6F8),
+                border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.circular(14)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
               onChanged: _filtrar,
             ),
           ),
-
-          // Lista
           Expanded(
             child: _filtrados.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 48, color: Colors.grey.shade300),
+                        Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
                         const SizedBox(height: 12),
-                        Text('Sin productos con stock',
-                            style: TextStyle(color: Colors.grey.shade400)),
+                        Text('Sin productos con stock', style: TextStyle(color: Colors.grey.shade400)),
                       ],
                     ),
                   )
@@ -730,76 +522,30 @@ class _ProductoSheetState extends State<_ProductoSheet> {
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4F6F8),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        decoration: BoxDecoration(color: const Color(0xFFF4F6F8), borderRadius: BorderRadius.circular(14)),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 4),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                           leading: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: primaryDark.withAlpha(26),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text(
-                                p['nombre']
-                                    .toString()
-                                    .substring(0, 1)
-                                    .toUpperCase(),
-                                style: const TextStyle(
-                                    color: primaryDark,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16),
-                              ),
-                            ),
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(color: primaryDark.withAlpha(26), borderRadius: BorderRadius.circular(10)),
+                            child: Center(child: Text(p['nombre'].toString().substring(0, 1).toUpperCase(), style: const TextStyle(color: primaryDark, fontWeight: FontWeight.bold, fontSize: 16))),
                           ),
-                          title: Text(p['nombre'],
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: Color(0xFF1A1A2E))),
-                          subtitle: Text(
-                            'Stock: ${stock.toStringAsFixed(0)}',
-                            style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12),
-                          ),
+                          title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A1A2E))),
+                          subtitle: Text('Stock: ${stock.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _fmt.format(precio),
-                                style: const TextStyle(
-                                    color: primaryDark,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14),
-                              ),
+                              Text(_fmt.format(precio), style: const TextStyle(color: primaryDark, fontWeight: FontWeight.bold, fontSize: 14)),
                               const SizedBox(width: 10),
                               GestureDetector(
                                 onTap: cargando ? null : () => _onAgregar(p),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: cargando
-                                        ? Colors.grey.shade300
-                                        : primaryDark,
-                                    shape: BoxShape.circle,
-                                  ),
+                                  width: 36, height: 36,
+                                  decoration: BoxDecoration(color: cargando ? Colors.grey.shade300 : primaryDark, shape: BoxShape.circle),
                                   child: cargando
-                                      ? const Padding(
-                                          padding: EdgeInsets.all(8),
-                                          child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.add,
-                                          color: Colors.white, size: 20),
+                                      ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : const Icon(Icons.add, color: Colors.white, size: 20),
                                 ),
                               ),
                             ],
@@ -815,17 +561,19 @@ class _ProductoSheetState extends State<_ProductoSheet> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Sheet de confirmación / ticket de cobro
-// ═════════════════════════════════════════════════════════════════════════════
-
-class _TicketCobro extends StatelessWidget {
+class _TicketCobro extends StatefulWidget {
   final CuentaAbierta cuenta;
   final NumberFormat fmt;
 
   const _TicketCobro({required this.cuenta, required this.fmt});
 
+  @override
+  State<_TicketCobro> createState() => _TicketCobroState();
+}
+
+class _TicketCobroState extends State<_TicketCobro> {
   static const Color primaryDark = Color(0xFF084B53);
+  String _metodoSeleccionado = 'Efectivo';
 
   @override
   Widget build(BuildContext context) {
@@ -834,145 +582,68 @@ class _TicketCobro extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(
-          24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
+      padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2)),
-          ),
-
-          // Ícono
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: primaryDark.withAlpha(20),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.receipt_long,
-                color: primaryDark, size: 28),
-          ),
+          Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          Container(width: 60, height: 60, decoration: BoxDecoration(color: primaryDark.withAlpha(20), shape: BoxShape.circle), child: const Icon(Icons.receipt_long, color: primaryDark, size: 28)),
           const SizedBox(height: 12),
-
-          const Text('Cobrar cuenta',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A2E))),
+          const Text('Cobrar cuenta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
           const SizedBox(height: 4),
-          Text(cuenta.nombre,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-
+          Text(widget.cuenta.nombre, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 8),
-
-          // Items
-          ...cuenta.items.map((item) => Padding(
+          ...widget.cuenta.items.map((item) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5),
                 child: Row(
                   children: [
                     Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: primaryDark.withAlpha(20),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          item.cantidad.toStringAsFixed(0),
-                          style: const TextStyle(
-                              color: primaryDark,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12),
-                        ),
-                      ),
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(color: primaryDark.withAlpha(20), borderRadius: BorderRadius.circular(8)),
+                      child: Center(child: Text(item.cantidad.toStringAsFixed(0), style: const TextStyle(color: primaryDark, fontWeight: FontWeight.bold, fontSize: 12))),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(item.nombre,
-                          style: const TextStyle(fontSize: 14)),
-                    ),
-                    Text(fmt.format(item.subtotal),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14)),
+                    Expanded(child: Text(item.nombre, style: const TextStyle(fontSize: 14))),
+                    Text(widget.fmt.format(item.subtotal), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   ],
                 ),
               )),
-
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 10),
-
-          // Total
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('TOTAL',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                      letterSpacing: 1)),
-              Text(
-                fmt.format(cuenta.total),
-                style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: primaryDark),
-              ),
+              const Text('TOTAL', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+              Text(widget.fmt.format(widget.cuenta.total), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryDark)),
             ],
           ),
-
           const SizedBox(height: 20),
-
-          // Botones
+          _buildMetodoPagoSelector(),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey.shade600,
-                    side: BorderSide(color: Colors.grey.shade300),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancelar',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.grey.shade600, side: BorderSide(color: Colors.grey.shade300), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                  onPressed: () => Navigator.pop(context, {'confirmado': false}),
+                  child: const Text('Cancelar', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryDark,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 3,
-                  ),
-                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 3),
+                  onPressed: () => Navigator.pop(context, {'confirmado': true, 'metodo': _metodoSeleccionado}),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.check_circle_outline, size: 20),
                       SizedBox(width: 8),
-                      Text('Confirmar cobro',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('Confirmar cobro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
                 ),
@@ -980,6 +651,29 @@ class _TicketCobro extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMetodoPagoSelector() {
+    return SegmentedButton<String>(
+      segments: const <ButtonSegment<String>>[
+        ButtonSegment<String>(value: 'Efectivo', label: Text('Efectivo'), icon: Icon(Icons.money_rounded)),
+        ButtonSegment<String>(value: 'Tarjeta', label: Text('Tarjeta'), icon: Icon(Icons.credit_card)),
+        ButtonSegment<String>(value: 'QR', label: Text('QR'), icon: Icon(Icons.qr_code_2)),
+      ],
+      selected: {_metodoSeleccionado},
+      onSelectionChanged: (Set<String> newSelection) {
+        setState(() {
+          _metodoSeleccionado = newSelection.first;
+        });
+      },
+      style: SegmentedButton.styleFrom(
+        backgroundColor: Colors.grey.shade200,
+        foregroundColor: primaryDark,
+        selectedForegroundColor: Colors.white,
+        selectedBackgroundColor: primaryDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

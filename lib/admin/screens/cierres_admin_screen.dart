@@ -18,8 +18,8 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0, locale: 'es_ES');
 
   List<Map<String, dynamic>> _historial = [];
-  bool   _cargando  = true;
-  double _totalHoy  = 0.0;
+  bool   _cargando = true;
+  double _totalHoy = 0.0;
 
   @override
   void initState() { super.initState(); _cargar(); }
@@ -44,7 +44,8 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
     if (!mounted) return;
 
     if (yaImportado) {
-      _mostrarDuplicado(nombreArchivo); return;
+      _mostrarDuplicado(nombreArchivo);
+      return;
     }
 
     try {
@@ -78,18 +79,24 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
-          Container(width: 36, height: 36,
-            decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle),
-            child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18)),
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+                color: Colors.orange.shade50, shape: BoxShape.circle),
+            child: const Icon(Icons.warning_amber_rounded,
+                color: Colors.orange, size: 18)),
           const SizedBox(width: 12),
           const Text('Cierre duplicado', style: TextStyle(fontSize: 17)),
         ]),
         content: Text('"$nombre" ya fue importado anteriormente.'),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: primaryDark,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryDark,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () => Navigator.pop(context),
             child: const Text('Entendido'),
           ),
@@ -127,7 +134,8 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [primaryDark, primaryMid],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
             padding: EdgeInsets.only(
@@ -142,21 +150,27 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Cierres', style: TextStyle(color: Colors.white,
-                            fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text('Cierres',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold)),
                         Text('Ventas recibidas del cajero',
-                            style: TextStyle(color: Colors.white60, fontSize: 13)),
+                            style: TextStyle(
+                                color: Colors.white60, fontSize: 13)),
                       ],
                     ),
                   ),
                   GestureDetector(
                     onTap: _cargar,
-                    child: Container(width: 40, height: 40,
+                    child: Container(
+                      width: 40, height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white.withAlpha(46),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.refresh, color: Colors.white, size: 20)),
+                      child: const Icon(Icons.refresh,
+                          color: Colors.white, size: 20)),
                   ),
                 ]),
                 const SizedBox(height: 20),
@@ -171,21 +185,29 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                     border: Border.all(color: Colors.white.withAlpha(51)),
                   ),
                   child: Row(children: [
-                    Container(width: 44, height: 44,
+                    Container(
+                      width: 44, height: 44,
                       decoration: BoxDecoration(
                         color: Colors.white.withAlpha(51),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.today, color: Colors.white, size: 22)),
+                      child: const Icon(Icons.today,
+                          color: Colors.white, size: 22)),
                     const SizedBox(width: 14),
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Total ventas de hoy',
-                          style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text(_fmt.format(_totalHoy),
-                          style: const TextStyle(color: Colors.white,
-                              fontSize: 28, fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
-                    ]),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Total ventas de hoy',
+                            style: TextStyle(
+                                color: Colors.white70, fontSize: 12)),
+                        Text(_fmt.format(_totalHoy),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5)),
+                      ],
+                    ),
                   ]),
                 ),
               ],
@@ -214,16 +236,18 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
             ),
           ),
 
-          // ── Lista ──────────────────────────────────────────────────
+          // ── Lista de cierres ──────────────────────────────────────
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
                 : _historial.isEmpty
                     ? _emptyState()
                     : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        padding:
+                            const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         itemCount: _historial.length,
-                        itemBuilder: (_, i) => _cierreCard(_historial[i], i),
+                        itemBuilder: (_, i) =>
+                            _cierreCard(_historial[i], i),
                       ),
           ),
         ],
@@ -237,28 +261,36 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withAlpha(13),
-          blurRadius: 8, offset: const Offset(0, 3),
-        )],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           width: 46, height: 46,
           decoration: BoxDecoration(
             color: primaryDark.withAlpha(20),
             borderRadius: BorderRadius.circular(13),
           ),
-          child: const Icon(Icons.receipt_long_outlined, color: primaryDark, size: 22),
+          child: const Icon(Icons.receipt_long_outlined,
+              color: primaryDark, size: 22),
         ),
         title: Text(item['archivo'],
-            style: const TextStyle(fontWeight: FontWeight.bold,
-                fontSize: 13, color: Color(0xFF1A1A2E))),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Color(0xFF1A1A2E))),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text('Importado: ${item['fecha_imp']}',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              style: TextStyle(
+                  color: Colors.grey.shade500, fontSize: 11)),
         ),
         trailing: Container(
           width: 32, height: 32,
@@ -266,7 +298,8 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
             color: primaryDark.withAlpha(20),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.chevron_right, color: primaryDark, size: 18),
+          child: const Icon(Icons.chevron_right,
+              color: primaryDark, size: 18),
         ),
         onTap: () => _verDetalle(item['fecha_imp']),
       ),
@@ -276,13 +309,18 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
   Widget _emptyState() {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 80, height: 80,
+        Container(
+          width: 80, height: 80,
           decoration: BoxDecoration(
-            color: primaryDark.withAlpha(18), shape: BoxShape.circle),
-          child: const Icon(Icons.inbox_outlined, size: 36, color: primaryDark)),
+              color: primaryDark.withAlpha(18), shape: BoxShape.circle),
+          child: const Icon(Icons.inbox_outlined,
+              size: 36, color: primaryDark)),
         const SizedBox(height: 16),
-        const Text('Sin cierres importados', style: TextStyle(fontSize: 18,
-            fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
+        const Text('Sin cierres importados',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A2E))),
         const SizedBox(height: 8),
         Text('Importa el archivo .gv del cajero',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
@@ -299,8 +337,10 @@ class _DetalleSheet extends StatelessWidget {
   final NumberFormat fmt;
 
   const _DetalleSheet({
-    required this.fecha, required this.resumen,
-    required this.detalle, required this.fmt,
+    required this.fecha,
+    required this.resumen,
+    required this.detalle,
+    required this.fmt,
   });
 
   static const Color primaryDark = Color(0xFF084B53);
@@ -317,53 +357,75 @@ class _DetalleSheet extends StatelessWidget {
       child: Column(
         children: [
           // Handle
-          Container(margin: const EdgeInsets.only(top: 12, bottom: 4),
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2))),
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
+          ),
 
           // Título
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Row(children: [
-              Container(width: 40, height: 40,
+              Container(
+                width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: primaryDark.withAlpha(20), shape: BoxShape.circle),
-                child: const Icon(Icons.receipt_long, color: primaryDark, size: 20)),
+                    color: primaryDark.withAlpha(20),
+                    shape: BoxShape.circle),
+                child: const Icon(Icons.receipt_long,
+                    color: primaryDark, size: 20)),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Detalle del cierre',
-                      style: TextStyle(fontWeight: FontWeight.bold,
-                          fontSize: 16, color: Color(0xFF1A1A2E))),
-                  Text(fecha, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Detalle del cierre',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Color(0xFF1A1A2E))),
+                    Text(fecha,
+                        style: TextStyle(
+                            color: Colors.grey.shade500, fontSize: 12)),
+                  ],
+                ),
               ),
             ]),
           ),
 
           const SizedBox(height: 12),
 
-          // Chips resumen
+          // Chips: número de ventas y total general
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(children: [
               _chip('Ventas', '${resumen['numeroVentas']}', Colors.blue),
               const SizedBox(width: 10),
-              _chip('Total', fmt.format(resumen['totalVentas']), Colors.green),
+              _chip('Total', fmt.format(resumen['totalVentas']),
+                  Colors.green),
             ]),
           ),
 
           const SizedBox(height: 12),
+
+          // Sección de totales por método de pago (Efectivo / Tarjeta / QR)
+          _buildMetodosPago(),
+
+          const SizedBox(height: 12),
           const Divider(height: 1),
 
-          // Lista detalle
+          // Lista de productos vendidos
           Expanded(
             child: detalle.isEmpty
-                ? Center(child: Text('Sin detalle disponible',
-                    style: TextStyle(color: Colors.grey.shade400)))
+                ? Center(
+                    child: Text('Sin detalle disponible',
+                        style:
+                            TextStyle(color: Colors.grey.shade400)))
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    padding:
+                        const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: detalle.length,
                     itemBuilder: (_, i) {
                       final item = detalle[i];
@@ -375,36 +437,116 @@ class _DetalleSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(children: [
-                          Container(width: 38, height: 38,
+                          Container(
+                            width: 38, height: 38,
                             decoration: BoxDecoration(
                               color: primaryDark.withAlpha(26),
                               borderRadius: BorderRadius.circular(10)),
-                            child: Center(child: Text(
-                              item['nombre'].toString().substring(0, 1).toUpperCase(),
-                              style: const TextStyle(color: primaryDark,
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                            )),
+                            child: Center(
+                              child: Text(
+                                item['nombre']
+                                    .toString()
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                    color: primaryDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16),
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item['nombre'], style: const TextStyle(
-                                  fontWeight: FontWeight.w600, fontSize: 13,
-                                  color: Color(0xFF1A1A2E))),
-                              Text('Cant: ${item['cantidadTotal']}',
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                            ],
-                          )),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(item['nombre'],
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        color: Color(0xFF1A1A2E))),
+                                Text(
+                                    'Cant: ${item['cantidadTotal']}',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                        fontSize: 12)),
+                              ],
+                            ),
+                          ),
                           Text(fmt.format(item['totalVendido']),
-                              style: const TextStyle(fontWeight: FontWeight.bold,
-                                  fontSize: 14, color: primaryDark)),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: primaryDark)),
                         ]),
                       );
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Muestra desglose por Efectivo / Tarjeta / QR leído desde totalesPorMetodo
+  Widget _buildMetodosPago() {
+    final totales =
+        resumen['totalesPorMetodo'] as Map<String, double>? ?? {};
+    if (totales.isEmpty) return const SizedBox.shrink();
+
+    const Map<String, IconData> iconos = {
+      'Efectivo': Icons.money_rounded,
+      'Tarjeta':  Icons.credit_card,
+      'QR':       Icons.qr_code_2,
+    };
+    const orden = ['Efectivo', 'Tarjeta', 'QR'];
+
+    final tiles = orden
+        .where((m) => totales.containsKey(m) && totales[m]! > 0)
+        .map<Widget>((m) => ListTile(
+              dense: true,
+              leading: Icon(iconos[m] ?? Icons.payment,
+                  color: primaryDark, size: 22),
+              title: Text(m,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14)),
+              trailing: Text(
+                fmt.format(totales[m]),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: primaryDark),
+              ),
+            ))
+        .toList();
+
+    if (tiles.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Card(
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text('Por método de pago',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey)),
+            ),
+            const Divider(height: 1),
+            ...tiles,
+          ],
+        ),
       ),
     );
   }
@@ -418,13 +560,22 @@ class _DetalleSheet extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withAlpha(51)),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: color, fontSize: 11,
-              fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(valor, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18,
-              color: Color(0xFF1A1A2E))),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(valor,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Color(0xFF1A1A2E))),
+          ],
+        ),
       ),
     );
   }

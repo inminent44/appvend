@@ -38,7 +38,7 @@ class DBHelperAdmin {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
@@ -68,10 +68,11 @@ class DBHelperAdmin {
         ''');
         await db.execute('''
           CREATE TABLE ventas_importadas (
-            id_venta  TEXT    NOT NULL PRIMARY KEY,
-            fecha     TEXT    NOT NULL,
-            total     REAL    NOT NULL,
-            cierre_id INTEGER NOT NULL,
+            id_venta    TEXT    NOT NULL PRIMARY KEY,
+            fecha       TEXT    NOT NULL,
+            total       REAL    NOT NULL,
+            cierre_id   INTEGER NOT NULL,
+            metodo_pago TEXT    NOT NULL DEFAULT 'Efectivo',
             FOREIGN KEY (cierre_id) REFERENCES cierres_importados (id)
           )
         ''');
@@ -86,6 +87,13 @@ class DBHelperAdmin {
             FOREIGN KEY (id_venta) REFERENCES ventas_importadas (id_venta)
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            "ALTER TABLE ventas_importadas ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'Efectivo'"
+          );
+        }
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
     );
@@ -161,7 +169,6 @@ class DBHelperAdmin {
   }
 
   // ─── EXPORTAR INVENTARIO AL CAJERO ─────────────────────────────────────────
-  // Se comparte por WhatsApp, email, Drive, etc. → el cajero lo importa.
 
   Future<void> exportarInventario() async {
     final productos = await obtenerProductosConStock();
@@ -208,9 +215,9 @@ class DBHelperAdmin {
   }
 
   Future<void> importarCierreCaja(File archivo) async {
-    final db         = await database;
-    final contenido  = await archivo.readAsString();
-    final xmlString  =
+    final db        = await database;
+    final contenido = await archivo.readAsString();
+    final xmlString =
         _encrypter.decrypt(enc.Encrypted.fromBase64(contenido), iv: _iv);
     final document      = XmlDocument.parse(xmlString);
     final nombreArchivo = archivo.path.split('/').last;
@@ -228,10 +235,15 @@ class DBHelperAdmin {
         await txn.insert(
           'ventas_importadas',
           {
-            'id_venta':  data['id_venta'],
-            'fecha':     data['fecha'],
-            'total':     double.tryParse(data['total'].toString()) ?? 0.0,
-            'cierre_id': cierreId,
+            'id_venta':    data['id_venta'],
+            'fecha':       data['fecha'],
+            'total':       double.tryParse(data['total'].toString()) ?? 0.0,
+            'cierre_id':   cierreId,
+            // Leer metodo_pago del XML; si el cajero es versión anterior
+            // el campo no existe y se usa 'Efectivo' como valor por defecto.
+            'metodo_pago': (data['metodo_pago']?.toString().isNotEmpty == true)
+                ? data['metodo_pago'].toString()
+                : 'Efectivo',
           },
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
@@ -256,7 +268,7 @@ class DBHelperAdmin {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
 
-        // Registrar el movimiento de salida de stock en el admin
+        // Registrar movimiento de salida de stock en el admin
         final productoExiste = await txn.query(
           'productos',
           where: 'id = ?',
@@ -286,7 +298,12 @@ class DBHelperAdmin {
       limit: 1,
     );
     if (cierres.isEmpty) {
-      return {'totalVentas': 0.0, 'numeroVentas': 0, 'detalle': []};
+      return {
+        'totalVentas':      0.0,
+        'numeroVentas':     0,
+        'detalle':          [],
+        'totalesPorMetodo': <String, double>{},
+      };
     }
     final cierreId = cierres.first['id'] as int;
 
@@ -311,10 +328,24 @@ class DBHelperAdmin {
       ORDER BY totalVendido DESC
     ''', [cierreId]);
 
+    // Totales agrupados por método de pago
+    final porMetodo = await db.rawQuery('''
+      SELECT metodo_pago, COALESCE(SUM(total), 0.0) AS subtotal
+      FROM ventas_importadas
+      WHERE cierre_id = ?
+      GROUP BY metodo_pago
+    ''', [cierreId]);
+
+    final Map<String, double> totalesMetodo = {
+      for (final row in porMetodo)
+        row['metodo_pago'] as String: (row['subtotal'] as num).toDouble()
+    };
+
     return {
-      'totalVentas':  (totales.first['totalVentas']  as num).toDouble(),
-      'numeroVentas': (totales.first['numeroVentas'] as num).toInt(),
-      'detalle':      detalle,
+      'totalVentas':      (totales.first['totalVentas']  as num).toDouble(),
+      'numeroVentas':     (totales.first['numeroVentas'] as num).toInt(),
+      'detalle':          detalle,
+      'totalesPorMetodo': totalesMetodo,
     };
   }
 
@@ -333,37 +364,35 @@ class DBHelperAdmin {
   // ─── BACKUP ────────────────────────────────────────────────────────────────
 
   Future<void> exportarBackup() async {
-  final db          = await database;
-  final productos   = await db.query('productos');
-  final movimientos = await db.query('movimientos');
-  final cierres     = await db.query('cierres_importados');
-  final ventas      = await db.query('ventas_importadas');
-  final detalles    = await db.query('detalle_venta_importada');
+    final db          = await database;
+    final productos   = await db.query('productos');
+    final movimientos = await db.query('movimientos');
+    final cierres     = await db.query('cierres_importados');
+    final ventas      = await db.query('ventas_importadas');
+    final detalles    = await db.query('detalle_venta_importada');
 
-  final builder = XmlBuilder();
-  builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-  builder.element('Backup', nest: () {
-    _escribirTabla(builder, 'Productos',   'Producto',   productos);
-    _escribirTabla(builder, 'Movimientos', 'Movimiento', movimientos);
-    _escribirTabla(builder, 'Cierres',     'Cierre',     cierres);
-    _escribirTabla(builder, 'Ventas',      'Venta',      ventas);
-    _escribirTabla(builder, 'Detalles',    'Detalle',    detalles);
-  });
+    final builder = XmlBuilder();
+    builder.processing('xml', 'version="1.0" encoding="UTF-8"');
+    builder.element('Backup', nest: () {
+      _escribirTabla(builder, 'Productos',   'Producto',   productos);
+      _escribirTabla(builder, 'Movimientos', 'Movimiento', movimientos);
+      _escribirTabla(builder, 'Cierres',     'Cierre',     cierres);
+      _escribirTabla(builder, 'Ventas',      'Venta',      ventas);
+      _escribirTabla(builder, 'Detalles',    'Detalle',    detalles);
+    });
 
-  final xmlStr    = builder.buildDocument().toXmlString();
-  final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-  final hoy       = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    final xmlStr    = builder.buildDocument().toXmlString();
+    final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
+    final hoy       = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    final dir       = await getTemporaryDirectory();
+    final file      = File('${dir.path}/backup_admin_$hoy.bkp');
+    await file.writeAsString(encrypted.base64);
 
-  // ── Siempre a temp → share sheet → el usuario elige dónde guardar
-  final dir  = await getTemporaryDirectory();
-  final file = File('${dir.path}/backup_admin_$hoy.bkp');
-  await file.writeAsString(encrypted.base64);
-
-  await Share.shareXFiles(
-    [XFile(file.path)],
-    text: 'Backup VaraNova Admin — $hoy',
-  );
-}
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: 'Backup VaraNova Admin — $hoy',
+    );
+  }
 
   Future<void> restaurarBackup(File archivo) async {
     final db        = await database;
@@ -384,7 +413,7 @@ class DBHelperAdmin {
         await txn.insert(
           'productos',
           {
-            'id':          int.tryParse(m['id'].toString())           ?? 0,
+            'id':          int.tryParse(m['id'].toString())            ?? 0,
             'nombre':      m['nombre'],
             'precioVenta': double.tryParse(m['precioVenta'].toString()) ?? 0.0,
             'stockActual': double.tryParse(m['stockActual'].toString()) ?? 0.0,
@@ -424,10 +453,13 @@ class DBHelperAdmin {
         await txn.insert(
           'ventas_importadas',
           {
-            'id_venta':  m['id_venta'],
-            'fecha':     m['fecha'],
-            'total':     double.tryParse(m['total'].toString())     ?? 0.0,
-            'cierre_id': int.tryParse(m['cierre_id'].toString())    ?? 0,
+            'id_venta':    m['id_venta'],
+            'fecha':       m['fecha'],
+            'total':       double.tryParse(m['total'].toString())     ?? 0.0,
+            'cierre_id':   int.tryParse(m['cierre_id'].toString())    ?? 0,
+            'metodo_pago': (m['metodo_pago']?.toString().isNotEmpty == true)
+                ? m['metodo_pago'].toString()
+                : 'Efectivo',
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
