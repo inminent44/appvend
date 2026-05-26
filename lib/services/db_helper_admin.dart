@@ -38,14 +38,15 @@ class DBHelperAdmin {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,                   // ← era 2, subimos a 3
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
-            id          INTEGER PRIMARY KEY,
-            nombre      TEXT    NOT NULL,
-            precioVenta REAL    NOT NULL,
-            stockActual REAL    NOT NULL DEFAULT 0
+            id             INTEGER PRIMARY KEY,
+            nombre         TEXT    NOT NULL,
+            precioVenta    REAL    NOT NULL,
+            categoria      TEXT,
+            tipo_producto  TEXT
           )
         ''');
         await db.execute('''
@@ -93,6 +94,18 @@ class DBHelperAdmin {
           await db.execute(
               "ALTER TABLE ventas_importadas ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'Efectivo'");
         }
+        // ── v3: soporte restaurante/cafetería ─────────────────────────────
+        if (oldVersion < 3) {
+          // try/catch por si la columna ya existiera (seguro correr 2 veces)
+          try {
+            await db.execute(
+                'ALTER TABLE productos ADD COLUMN categoria TEXT');
+          } catch (_) {}
+          try {
+            await db.execute(
+                'ALTER TABLE productos ADD COLUMN tipo_producto TEXT');
+          } catch (_) {}
+        }
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
     );
@@ -107,6 +120,8 @@ class DBHelperAdmin {
         p.id,
         p.nombre,
         p.precioVenta,
+        p.categoria,
+        p.tipo_producto,
         COALESCE(
           (SELECT SUM(m.cantidad) FROM movimientos m WHERE m.producto_id = p.id),
           0
@@ -135,11 +150,18 @@ class DBHelperAdmin {
     required int id,
     required String nombre,
     required double precioVenta,
+    String? categoria,           // ← NUEVO (nullable = sin categoría)
+    String? tipoProducto,        // ← NUEVO (nullable = retail clásico)
   }) async {
     final db = await database;
     await db.update(
       'productos',
-      {'nombre': nombre, 'precioVenta': precioVenta},
+      {
+        'nombre':        nombre,
+        'precioVenta':   precioVenta,
+        'categoria':     categoria,      // null borra la categoría
+        'tipo_producto': tipoProducto,   // null borra el tipo
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -178,10 +200,13 @@ class DBHelperAdmin {
     builder.element('Inventario', nest: () {
       for (final p in productos) {
         builder.element('Producto', nest: () {
-          builder.element('id', nest: p['id'].toString());
-          builder.element('nombre', nest: p['nombre'].toString());
-          builder.element('precioVenta', nest: p['precioVenta'].toString());
-          builder.element('stockActual', nest: p['stockActual'].toString());
+          builder.element('id',            nest: p['id'].toString());
+          builder.element('nombre',        nest: p['nombre'].toString());
+          builder.element('precioVenta',   nest: p['precioVenta'].toString());
+          builder.element('stockActual',   nest: p['stockActual'].toString());
+          // ← NUEVO: exportar categoría y tipo al cajero
+          builder.element('categoria',     nest: (p['categoria']     ?? '').toString());
+          builder.element('tipo_producto', nest: (p['tipo_producto'] ?? '').toString());
         });
       }
     });
@@ -240,12 +265,10 @@ class DBHelperAdmin {
         await txn.insert(
           'ventas_importadas',
           {
-            'id_venta': data['id_venta'],
-            'fecha': data['fecha'],
-            'total': double.tryParse(data['total'].toString()) ?? 0.0,
-            'cierre_id': cierreId,
-            // Leer metodo_pago del XML; si el cajero es versión anterior
-            // el campo no existe y se usa 'Efectivo' como valor por defecto.
+            'id_venta':   data['id_venta'],
+            'fecha':      data['fecha'],
+            'total':      double.tryParse(data['total'].toString()) ?? 0.0,
+            'cierre_id':  cierreId,
             'metodo_pago': (data['metodo_pago']?.toString().isNotEmpty == true)
                 ? data['metodo_pago'].toString()
                 : 'Efectivo',
@@ -257,23 +280,22 @@ class DBHelperAdmin {
       for (final d in document.findAllElements('Detalle')) {
         final data = _xmlToMap(d);
         final cantidad = double.tryParse(data['cantidad'].toString()) ?? 0.0;
-        final precio = double.tryParse(data['precio'].toString()) ?? 0.0;
-        final prodId = int.tryParse(data['producto_id'].toString()) ?? 0;
+        final precio   = double.tryParse(data['precio'].toString())   ?? 0.0;
+        final prodId   = int.tryParse(data['producto_id'].toString()) ?? 0;
 
         await txn.insert(
           'detalle_venta_importada',
           {
-            'id_detalle': data['id_detalle'],
-            'id_venta': data['id_venta'],
+            'id_detalle':  data['id_detalle'],
+            'id_venta':    data['id_venta'],
             'producto_id': prodId,
-            'cantidad': cantidad,
-            'precio': precio,
-            'total': double.tryParse(data['total'].toString()) ?? 0.0,
+            'cantidad':    cantidad,
+            'precio':      precio,
+            'total':       double.tryParse(data['total'].toString()) ?? 0.0,
           },
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
 
-        // Registrar movimiento de salida de stock en el admin
         final productoExiste = await txn.query(
           'productos',
           where: 'id = ?',
@@ -284,10 +306,10 @@ class DBHelperAdmin {
           final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
           await txn.insert('movimientos', {
             'producto_id': prodId,
-            'cantidad': -cantidad,
-            'fecha': hoy,
-            'tipo': 'venta_cajero',
-            'nota': 'Cierre importado: $nombreArchivo',
+            'cantidad':    -cantidad,
+            'fecha':       hoy,
+            'tipo':        'venta_cajero',
+            'nota':        'Cierre importado: $nombreArchivo',
           });
         }
       }
@@ -304,9 +326,9 @@ class DBHelperAdmin {
     );
     if (cierres.isEmpty) {
       return {
-        'totalVentas': 0.0,
-        'numeroVentas': 0,
-        'detalle': [],
+        'totalVentas':      0.0,
+        'numeroVentas':     0,
+        'detalle':          [],
         'totalesPorMetodo': <String, double>{},
       };
     }
@@ -333,7 +355,6 @@ class DBHelperAdmin {
       ORDER BY totalVendido DESC
     ''', [cierreId]);
 
-    // Totales agrupados por método de pago
     final porMetodo = await db.rawQuery('''
       SELECT metodo_pago, COALESCE(SUM(total), 0.0) AS subtotal
       FROM ventas_importadas
@@ -347,9 +368,9 @@ class DBHelperAdmin {
     };
 
     return {
-      'totalVentas': (totales.first['totalVentas'] as num).toDouble(),
-      'numeroVentas': (totales.first['numeroVentas'] as num).toInt(),
-      'detalle': detalle,
+      'totalVentas':      (totales.first['totalVentas']  as num).toDouble(),
+      'numeroVentas':     (totales.first['numeroVentas'] as num).toInt(),
+      'detalle':          detalle,
       'totalesPorMetodo': totalesMetodo,
     };
   }
@@ -370,27 +391,27 @@ class DBHelperAdmin {
 
   Future<void> exportarBackup() async {
     final db = await database;
-    final productos = await db.query('productos');
-    final movimientos = await db.query('movimientos');
-    final cierres = await db.query('cierres_importados');
-    final ventas = await db.query('ventas_importadas');
-    final detalles = await db.query('detalle_venta_importada');
+    final productos    = await db.query('productos');
+    final movimientos  = await db.query('movimientos');
+    final cierres      = await db.query('cierres_importados');
+    final ventas       = await db.query('ventas_importadas');
+    final detalles     = await db.query('detalle_venta_importada');
 
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
     builder.element('Backup', nest: () {
-      _escribirTabla(builder, 'Productos', 'Producto', productos);
-      _escribirTabla(builder, 'Movimientos', 'Movimiento', movimientos);
-      _escribirTabla(builder, 'Cierres', 'Cierre', cierres);
-      _escribirTabla(builder, 'Ventas', 'Venta', ventas);
-      _escribirTabla(builder, 'Detalles', 'Detalle', detalles);
+      _escribirTabla(builder, 'Productos',    'Producto',  productos);
+      _escribirTabla(builder, 'Movimientos',  'Movimiento', movimientos);
+      _escribirTabla(builder, 'Cierres',      'Cierre',    cierres);
+      _escribirTabla(builder, 'Ventas',       'Venta',     ventas);
+      _escribirTabla(builder, 'Detalles',     'Detalle',   detalles);
     });
 
-    final xmlStr = builder.buildDocument().toXmlString();
+    final xmlStr    = builder.buildDocument().toXmlString();
     final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-    final hoy = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/backup_admin_$hoy.bkp');
+    final hoy       = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    final dir       = await getTemporaryDirectory();
+    final file      = File('${dir.path}/backup_admin_$hoy.bkp');
     await file.writeAsString(encrypted.base64);
 
     await SharePlus.instance.share(
@@ -420,10 +441,12 @@ class DBHelperAdmin {
         await txn.insert(
           'productos',
           {
-            'id': int.tryParse(m['id'].toString()) ?? 0,
-            'nombre': m['nombre'],
-            'precioVenta': double.tryParse(m['precioVenta'].toString()) ?? 0.0,
-            'stockActual': double.tryParse(m['stockActual'].toString()) ?? 0.0,
+            'id':            int.tryParse(m['id'].toString()) ?? 0,
+            'nombre':        m['nombre'],
+            'precioVenta':   double.tryParse(m['precioVenta'].toString()) ?? 0.0,
+            // Restaurar nuevos campos si existen en el backup, si no null
+            'categoria':     m['categoria']?.toString().isEmpty == true ? null : m['categoria'],
+            'tipo_producto': m['tipo_producto']?.toString().isEmpty == true ? null : m['tipo_producto'],
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -433,12 +456,12 @@ class DBHelperAdmin {
         await txn.insert(
           'movimientos',
           {
-            'id': int.tryParse(m['id'].toString()),
+            'id':          int.tryParse(m['id'].toString()),
             'producto_id': int.tryParse(m['producto_id'].toString()) ?? 0,
-            'cantidad': double.tryParse(m['cantidad'].toString()) ?? 0.0,
-            'fecha': m['fecha'],
-            'tipo': m['tipo'],
-            'nota': m['nota'],
+            'cantidad':    double.tryParse(m['cantidad'].toString()) ?? 0.0,
+            'fecha':       m['fecha'],
+            'tipo':        m['tipo'],
+            'nota':        m['nota'],
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -448,8 +471,8 @@ class DBHelperAdmin {
         await txn.insert(
           'cierres_importados',
           {
-            'id': int.tryParse(m['id'].toString()),
-            'archivo': m['archivo'],
+            'id':        int.tryParse(m['id'].toString()),
+            'archivo':   m['archivo'],
             'fecha_imp': m['fecha_imp'],
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -460,10 +483,10 @@ class DBHelperAdmin {
         await txn.insert(
           'ventas_importadas',
           {
-            'id_venta': m['id_venta'],
-            'fecha': m['fecha'],
-            'total': double.tryParse(m['total'].toString()) ?? 0.0,
-            'cierre_id': int.tryParse(m['cierre_id'].toString()) ?? 0,
+            'id_venta':    m['id_venta'],
+            'fecha':       m['fecha'],
+            'total':       double.tryParse(m['total'].toString()) ?? 0.0,
+            'cierre_id':   int.tryParse(m['cierre_id'].toString()) ?? 0,
             'metodo_pago': (m['metodo_pago']?.toString().isNotEmpty == true)
                 ? m['metodo_pago'].toString()
                 : 'Efectivo',
@@ -476,12 +499,12 @@ class DBHelperAdmin {
         await txn.insert(
           'detalle_venta_importada',
           {
-            'id_detalle': m['id_detalle'],
-            'id_venta': m['id_venta'],
+            'id_detalle':  m['id_detalle'],
+            'id_venta':    m['id_venta'],
             'producto_id': int.tryParse(m['producto_id'].toString()) ?? 0,
-            'cantidad': double.tryParse(m['cantidad'].toString()) ?? 0.0,
-            'precio': double.tryParse(m['precio'].toString()) ?? 0.0,
-            'total': double.tryParse(m['total'].toString()) ?? 0.0,
+            'cantidad':    double.tryParse(m['cantidad'].toString()) ?? 0.0,
+            'precio':      double.tryParse(m['precio'].toString()) ?? 0.0,
+            'total':       double.tryParse(m['total'].toString()) ?? 0.0,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );

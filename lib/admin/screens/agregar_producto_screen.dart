@@ -16,20 +16,23 @@ class AgregarProductoScreen extends StatefulWidget {
 
 class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   static const Color primaryDark = Color(0xFF084B53);
-  static const Color primaryMid  = Color(0xFF0A6B77);
-  static const Color bgPage      = Color(0xFFF4F6F8);
+  static const Color primaryMid = Color(0xFF0A6B77);
+  static const Color bgPage = Color(0xFFF4F6F8);
 
-  final _formKey            = GlobalKey<FormState>();
-  final _idController       = TextEditingController();
-  final _nombreController   = TextEditingController();
-  final _precioController   = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final _idController = TextEditingController();
+  final _nombreController = TextEditingController();
+  final _precioController = TextEditingController();
   final _cantidadController = TextEditingController();
+  // Restaurante: valores temporales para los selectors
+  String? _categoriaSeleccionada;
+  TipoProducto _tipoSeleccionado = TipoProducto.ninguno;
 
-  final _nombreFocus   = FocusNode();
-  final _precioFocus   = FocusNode();
+  final _nombreFocus = FocusNode();
+  final _precioFocus = FocusNode();
   final _cantidadFocus = FocusNode();
 
-  bool _cargando    = false;
+  bool _cargando = false;
   bool _idDuplicado = false;
   bool get _esEdicion => widget.producto != null;
 
@@ -37,11 +40,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void initState() {
     super.initState();
     if (_esEdicion) {
-      _idController.text       = widget.producto!.id.toString();
-      _nombreController.text   = widget.producto!.nombre;
-      _precioController.text   = widget.producto!.precioVenta.toString();
+      _idController.text = widget.producto!.id.toString();
+      _nombreController.text = widget.producto!.nombre;
+      _precioController.text = widget.producto!.precioVenta.toString();
     } else {
       _idController.addListener(_buscarProductoPorId);
+      _categoriaSeleccionada = widget.producto!.categoria;
+      _tipoSeleccionado = widget.producto!.tipoProducto;
     }
   }
 
@@ -84,24 +89,31 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           id: widget.producto!.id,
           nombre: nombre,
           precioVenta: precio,
+          categoria: _categoriaSeleccionada,
+          tipoProducto: _tipoSeleccionado.toDb(),
         );
         final cant = double.tryParse(
-            _cantidadController.text.trim().replaceAll(',', '.')) ?? 0;
+                _cantidadController.text.trim().replaceAll(',', '.')) ??
+            0;
         if (cant != 0) {
           await DBHelperAdmin.instance.insertarMovimiento(Movimiento(
             productoId: widget.producto!.id,
-            cantidad:   cant,
-            fecha:      DateFormat('yyyy-MM-dd').format(DateTime.now()),
-            tipo:       Movimiento.tipoAjuste,
-            nota:       'Ajuste desde edición',
+            cantidad: cant,
+            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            tipo: Movimiento.tipoAjuste,
+            nota: 'Ajuste desde edición',
           ));
         }
       } else {
-        final idNuevo  = int.parse(_idController.text);
-        final actuales = await DBHelperAdmin.instance.obtenerProductosConStock();
+        final idNuevo = int.parse(_idController.text);
+        final actuales =
+            await DBHelperAdmin.instance.obtenerProductosConStock();
 
         if (actuales.any((p) => p['id'] == idNuevo)) {
-          setState(() { _cargando = false; _idDuplicado = true; });
+          setState(() {
+            _cargando = false;
+            _idDuplicado = true;
+          });
           return;
         }
         if (actuales.length >= 300) {
@@ -111,18 +123,25 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           return;
         }
 
-        final producto = Producto(id: idNuevo, nombre: nombre, precioVenta: precio);
+        final producto = Producto(
+          id: idNuevo,
+          nombre: nombre,
+          precioVenta: precio,
+          categoria: _categoriaSeleccionada,
+          tipoProducto: _tipoSeleccionado,
+        );
         await DBHelperAdmin.instance.insertarProducto(producto);
 
         final cant = double.tryParse(
-            _cantidadController.text.trim().replaceAll(',', '.')) ?? 0;
+                _cantidadController.text.trim().replaceAll(',', '.')) ??
+            0;
         if (cant != 0) {
           await DBHelperAdmin.instance.insertarMovimiento(Movimiento(
             productoId: producto.id,
-            cantidad:   cant,
-            fecha:      DateFormat('yyyy-MM-dd').format(DateTime.now()),
-            tipo:       Movimiento.tipoAjuste,
-            nota:       'Carga inicial',
+            cantidad: cant,
+            fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            tipo: Movimiento.tipoAjuste,
+            nota: 'Carga inicial',
           ));
         }
       }
@@ -154,28 +173,36 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
             24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           // Handle
-          Container(margin: const EdgeInsets.only(bottom: 20),
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300,
+          Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2))),
 
           // Ícono
-          Container(width: 60, height: 60,
-            decoration: BoxDecoration(
-              color: Colors.red.shade50, shape: BoxShape.circle),
-            child: Icon(Icons.delete_outline,
-                color: Colors.red.shade600, size: 28)),
+          Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                  color: Colors.red.shade50, shape: BoxShape.circle),
+              child: Icon(Icons.delete_outline,
+                  color: Colors.red.shade600, size: 28)),
           const SizedBox(height: 12),
 
           const Text('Eliminar producto',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                   color: Color(0xFF1A1A2E))),
           const SizedBox(height: 8),
           Text(
             '¿Eliminar "${widget.producto!.nombre}" y todos sus movimientos?\n'
             'Esta acción no se puede deshacer.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.5),
+            style: TextStyle(
+                color: Colors.grey.shade500, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: 24),
 
@@ -213,8 +240,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                     Icon(Icons.delete_outline, size: 18),
                     SizedBox(width: 8),
                     Text('Eliminar',
-                        style: TextStyle(fontWeight: FontWeight.bold,
-                            fontSize: 15)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                   ],
                 ),
               ),
@@ -236,10 +263,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
-          Container(width: 36, height: 36,
-            decoration: BoxDecoration(
-                color: Colors.red.shade50, shape: BoxShape.circle),
-            child: const Icon(Icons.lock_outline, color: Colors.red, size: 18)),
+          Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: Colors.red.shade50, shape: BoxShape.circle),
+              child:
+                  const Icon(Icons.lock_outline, color: Colors.red, size: 18)),
           const SizedBox(width: 12),
           const Text('Límite alcanzado', style: TextStyle(fontSize: 17)),
         ]),
@@ -248,7 +278,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: primaryDark, foregroundColor: Colors.white,
+              backgroundColor: primaryDark,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
@@ -277,7 +308,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
             ),
             padding: EdgeInsets.only(
               top: MediaQuery.of(context).padding.top + 8,
-              left: 4, right: 16, bottom: 20,
+              left: 4,
+              right: 16,
+              bottom: 20,
             ),
             child: Row(
               children: [
@@ -292,8 +325,10 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                     children: [
                       Text(
                         _esEdicion ? 'Editar Producto' : 'Nuevo Producto',
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 20, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold),
                       ),
                       Text(
                         _esEdicion
@@ -305,12 +340,14 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                     ],
                   ),
                 ),
+
                 // Botón eliminar solo en edición
                 if (_esEdicion)
                   GestureDetector(
                     onTap: _eliminarProducto,
                     child: Container(
-                      width: 40, height: 40,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: Colors.red.withAlpha(64),
                         borderRadius: BorderRadius.circular(12),
@@ -332,7 +369,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     // ── Sección identificación ────────────────────────
                     _seccionLabel('Identificación'),
                     const SizedBox(height: 10),
@@ -350,24 +386,16 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                           labelText: 'Código / ID',
                           border: InputBorder.none,
                           prefixIcon: Icon(
-                            _esEdicion
-                                ? Icons.lock_outline
-                                : Icons.tag,
-                            color: _idDuplicado
-                                ? Colors.red
-                                : primaryDark,
+                            _esEdicion ? Icons.lock_outline : Icons.tag,
+                            color: _idDuplicado ? Colors.red : primaryDark,
                             size: 20,
                           ),
-                          errorText: _idDuplicado
-                              ? 'Este ID ya existe'
-                              : null,
-                          helperText: _esEdicion
-                              ? 'El ID no se puede modificar'
-                              : null,
+                          errorText: _idDuplicado ? 'Este ID ya existe' : null,
+                          helperText:
+                              _esEdicion ? 'El ID no se puede modificar' : null,
                         ),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Requerido'
-                            : null,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Requerido' : null,
                       ),
                       error: _idDuplicado,
                     ),
@@ -387,15 +415,91 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                           prefixIcon: Icon(Icons.inventory_2_outlined,
                               color: primaryDark, size: 20),
                         ),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Requerido'
-                            : null,
-                        onEditingComplete: () =>
-                            _precioFocus.requestFocus(),
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Requerido' : null,
+                        onEditingComplete: () => _precioFocus.requestFocus(),
                       ),
                     ),
 
                     const SizedBox(height: 24),
+
+                    const SizedBox(height: 24),
+                    _seccionLabel('Tipo de producto (opcional)'),
+                    const SizedBox(height: 10),
+                    _buildCard(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Selector de TipoProducto
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: TipoProducto.values.map((tipo) {
+                                final seleccionado = _tipoSeleccionado == tipo;
+                                return GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _tipoSeleccionado = tipo),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: seleccionado
+                                          ? primaryDark
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: seleccionado
+                                            ? primaryDark
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(tipo.emoji,
+                                            style:
+                                                const TextStyle(fontSize: 14)),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          tipo.label,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: seleccionado
+                                                ? Colors.white
+                                                : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 12),
+                            // Campo categoría libre
+                            TextFormField(
+                              initialValue: _categoriaSeleccionada,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                labelText: 'Categoría (opcional)',
+                                hintText:
+                                    'Ej: Bebidas frías, Del día, Entradas…',
+                                border: InputBorder.none,
+                                prefixIcon: Icon(Icons.label_outline,
+                                    color: primaryDark, size: 20),
+                              ),
+                              onChanged: (v) => _categoriaSeleccionada =
+                                  v.trim().isEmpty ? null : v.trim(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
 
                     // ── Sección precio ────────────────────────────────
                     _seccionLabel('Precio'),
@@ -418,11 +522,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                           prefixIcon: Icon(Icons.attach_money,
                               color: primaryDark, size: 20),
                         ),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Requerido'
-                            : null,
-                        onEditingComplete: () =>
-                            _cantidadFocus.requestFocus(),
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Requerido' : null,
+                        onEditingComplete: () => _cantidadFocus.requestFocus(),
                       ),
                     ),
 
@@ -437,9 +539,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                       child: TextFormField(
                         controller: _cantidadController,
                         focusNode: _cantidadFocus,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(
-                                decimal: true, signed: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true, signed: true),
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
                               RegExp(r'^-?\d*[,.]?\d*'))
@@ -449,8 +550,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                               ? 'Ajuste (+ agregar / - quitar)'
                               : 'Cantidad inicial en stock',
                           border: InputBorder.none,
-                          prefixIcon: const Icon(
-                              Icons.layers_outlined,
+                          prefixIcon: const Icon(Icons.layers_outlined,
                               color: primaryDark, size: 20),
                           helperText: _esEdicion
                               ? 'Usa negativo para reducir stock. Deja en 0 para no ajustar.'
@@ -463,7 +563,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                           if (v == null || v.trim().isEmpty) {
                             return 'Ingresa la cantidad inicial';
                           }
-                          final valor = double.tryParse(v.trim().replaceAll(',', '.'));
+                          final valor =
+                              double.tryParse(v.trim().replaceAll(',', '.'));
                           if (valor == null) {
                             return 'Número inválido';
                           }
@@ -497,7 +598,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                                 'Deja en 0 si no quieres modificar el stock.',
                                 style: TextStyle(
                                     color: Colors.blue.shade700,
-                                    fontSize: 11, height: 1.4),
+                                    fontSize: 11,
+                                    height: 1.4),
                               ),
                             ),
                           ],
@@ -513,10 +615,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                       height: 54,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              (_cargando || _idDuplicado)
-                                  ? Colors.grey.shade300
-                                  : primaryDark,
+                          backgroundColor: (_cargando || _idDuplicado)
+                              ? Colors.grey.shade300
+                              : primaryDark,
                           foregroundColor: Colors.white,
                           elevation: (_cargando || _idDuplicado) ? 0 : 3,
                           shape: RoundedRectangleBorder(
@@ -526,16 +627,17 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                             (_cargando || _idDuplicado) ? null : _guardar,
                         child: _cargando
                             ? const SizedBox(
-                                width: 22, height: 22,
+                                width: 22,
+                                height: 22,
                                 child: CircularProgressIndicator(
                                     color: Colors.white, strokeWidth: 2.5))
                             : Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(_esEdicion
-                                      ? Icons.check_circle_outline
-                                      : Icons.add_circle_outline,
+                                  Icon(
+                                      _esEdicion
+                                          ? Icons.check_circle_outline
+                                          : Icons.add_circle_outline,
                                       size: 20),
                                   const SizedBox(width: 8),
                                   Text(
@@ -576,11 +678,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: error ? Border.all(color: Colors.red.shade300, width: 1.5) : null,
-        boxShadow: [BoxShadow(
-          color: Colors.black.withAlpha(10),
-          blurRadius: 8, offset: const Offset(0, 3),
-        )],
+        border:
+            error ? Border.all(color: Colors.red.shade300, width: 1.5) : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
       ),
       child: child,
     );

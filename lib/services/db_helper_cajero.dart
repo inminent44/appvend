@@ -40,14 +40,16 @@ class DBHelperCajero {
 
     return await openDatabase(
       path,
-      version: 6, // Incrementar la versión de la base de datos
+      version: 7, // Incrementar la versión de la base de datos
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
-            id          INTEGER PRIMARY KEY,
-            nombre      TEXT NOT NULL,
-            precioVenta REAL NOT NULL,
-            stockActual REAL NOT NULL DEFAULT 0
+            id             INTEGER PRIMARY KEY,
+            nombre         TEXT NOT NULL,
+            precioVenta    REAL NOT NULL,
+            stockActual    REAL NOT NULL DEFAULT 0,
+            categoria      TEXT,
+            tipo_producto  TEXT
           )
         ''');
         await db.execute('''
@@ -180,6 +182,15 @@ class DBHelperCajero {
               FOREIGN KEY (id_venta) REFERENCES ventas (id_venta)
             )
           ''');
+        }
+        if (oldVersion < 7) {
+          try {
+            await db.execute('ALTER TABLE productos ADD COLUMN categoria TEXT');
+          } catch (_) {}
+          try {
+            await db
+                .execute('ALTER TABLE productos ADD COLUMN tipo_producto TEXT');
+          } catch (_) {}
         }
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
@@ -339,15 +350,6 @@ class DBHelperCajero {
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<void> iniciarNuevoDia() async {
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn.delete('detalle_venta');
-      await txn.delete('ventas');
-      await txn.delete('cierres_turno');
-    });
-  }
-
   // ─── CIERRE DE CAJA ────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> obtenerResumenCierre() async {
@@ -476,6 +478,14 @@ class DBHelperCajero {
             'nombre': data['nombre'],
             'precioVenta': data['precioVenta'],
             'stockActual': data['stockActual'] ?? 0.0,
+            'categoria':
+                data['categoria']?.toString().isEmpty == true // ← NUEVO
+                    ? null
+                    : data['categoria'],
+            'tipo_producto':
+                data['tipo_producto']?.toString().isEmpty == true // ← NUEVO
+                    ? null
+                    : data['tipo_producto'],
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
