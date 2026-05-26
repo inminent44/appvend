@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.varanova.poscaja"
+    namespace = "com.varanova.posadmin"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
