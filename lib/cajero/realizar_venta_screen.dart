@@ -1279,3 +1279,5 @@ class _PagoPorQRPanelState extends State<_PagoPorQRPanel> {
     );
   }
 }
+
+//ya terminado todo
