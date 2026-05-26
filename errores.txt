@@ -1,0 +1,31 @@
+Connected devices:
+sdk gphone64 x86 64 (mobile) • emulator-5554  • android-x64 • Android 16 (API 36) (emulator)
+sdk gphone64 x86 64 (mobile) • localhost:5555 • android-x64 • Android 16 (API 36) (emulator)
+[1]: sdk gphone64 x86 64 (emulator-5554)
+[2]: sdk gphone64 x86 64 (localhost:5555)
+Please choose one (or "q" to quit): 1
+Launching lib/main.dart on sdk gphone64 x86 64 in debug mode...
+Running Gradle task 'assembleDebug'...                          
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Settings file '/home/user/appvend/android/settings.gradle.kts' line: 20
+
+* What went wrong:
+Error resolving plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0']
+> A problem occurred configuring project ':gradle'.
+   > Could not resolve all artifacts for configuration 'classpath'.
+      > Failed to transform gradle-kotlin-dsl-plugins-5.2.0.jar (org.gradle.kotlin:gradle-kotlin-dsl-plugins:5.2.0) to match attributes {artifactType=jar, org.gradle.category=library, org.gradle.dependency.bundling=external, org.gradle.internal.instrumented=instrumented-and-upgraded, org.gradle.jvm.environment=standard-jvm, org.gradle.jvm.version=8, org.gradle.libraryelements=jar, org.gradle.status=release, org.gradle.usage=java-runtime, org.jetbrains.kotlin.platform.type=jvm}.
+         > Execution failed for MergeInstrumentationAnalysisTransform: /home/user/.gradle/caches/8.13/transforms/103a682e99372dd82fa849d44078de84/transformed/analysis/instrumentation-dependencies.bin.
+            > com.google.common.util.concurrent.UncheckedExecutionException: java.lang.IllegalStateException: Could not deserialize analysis from a file: /home/user/.gradle/caches/8.13/transforms/103a682e99372dd82fa849d44078de84/transformed/analysis/instrumentation-hierarchy.bin
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 926ms
+Running Gradle task 'assembleDebug'...                           1,162ms
+Error: Gradle task assembleDebug failed with exit code 1
