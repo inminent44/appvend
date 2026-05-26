@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 import '../../models/venta.dart';
 import '../../services/db_helper_cajero.dart';
 import 'package:another_telephony/telephony.dart';
-import 'package:vibration/vibration.dart';
 
 class RealizarVentaScreen extends StatefulWidget {
   const RealizarVentaScreen({super.key});
@@ -269,10 +268,6 @@ class _RealizarVentaScreenState extends State<RealizarVentaScreen> {
   }
 
   void _mostrarAlertaDuplicado(String idTransaccion) async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 500, amplitude: 128);
-    }
-
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -947,11 +942,6 @@ class _PagoPorQRPanelState extends State<_PagoPorQRPanel> {
         setState(() => _advertencia =
             'No se pudo leer el formato del SMS. Ingrese el ID manualmente.');
         return;
-      }
-
-      // Vibración suave de confirmación
-      if (await Vibration.hasVibrator() ?? false) {
-        Vibration.vibrate(duration: 80, amplitude: 60);
       }
 
       setState(() {
