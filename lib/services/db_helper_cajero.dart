@@ -40,7 +40,7 @@ class DBHelperCajero {
 
     return await openDatabase(
       path,
-      version: 7, // Incrementar la versión de la base de datos
+      version: 8, // Incrementar la versión de la base de datos
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
@@ -192,6 +192,42 @@ class DBHelperCajero {
                 .execute('ALTER TABLE productos ADD COLUMN tipo_producto TEXT');
           } catch (_) {}
         }
+        if (oldVersion < 8) {
+  try {
+    await db.execute(
+      'ALTER TABLE productos ADD COLUMN es_favorito INTEGER NOT NULL DEFAULT 0'
+    );
+  } catch (_) {}
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS item_modificadores (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      ref_id         TEXT    NOT NULL,
+      ref_tipo       TEXT    NOT NULL,
+      modificador_id INTEGER NOT NULL,
+      nombre         TEXT    NOT NULL,
+      precio_extra   REAL    NOT NULL DEFAULT 0
+    )
+  ''');
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS tasas_cambio (
+      moneda      TEXT PRIMARY KEY,
+      tasa_a_cup  REAL NOT NULL,
+      actualizado TEXT NOT NULL
+    )
+  ''');
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS ventas_moneda (
+      id_venta     TEXT PRIMARY KEY,
+      moneda       TEXT NOT NULL,
+      monto_moneda REAL NOT NULL,
+      tasa_usada   REAL NOT NULL,
+      FOREIGN KEY (id_venta) REFERENCES ventas(id_venta)
+    )
+  ''');
+}
       },
       onOpen: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
     );
