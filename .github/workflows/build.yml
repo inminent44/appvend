@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-
   workflow_dispatch:
 
 jobs:
@@ -39,32 +38,26 @@ jobs:
       - name: Analyze project
         run: flutter analyze
 
-      # ── TESTS (opcional) ────────────────────────────
-      # - name: Run tests
-      #   run: flutter test
-
       # ── BUILD APK RELEASE ────────────────────────────
       - name: Build Obfuscated APK
         run: |
           mkdir -p build/app/outputs/symbols
-
           flutter build apk --release \
             --obfuscate \
             --split-debug-info=build/app/outputs/symbols
-
           mv build/app/outputs/flutter-apk/app-release.apk \
-             build/app/outputs/flutter-apk/varanova-pos-admin.apk
+             build/app/outputs/flutter-apk/varanova-caja.apk
 
       # ── APK ARTIFACT ─────────────────────────────────
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VaraNova-Admin-APK
-          path: build/app/outputs/flutter-apk/varanova-admin-caja.apk
+          name: VaraNova-Caja-APK
+          path: build/app/outputs/flutter-apk/varanova-caja.apk
 
       # ── SYMBOLS ARTIFACT ─────────────────────────────
       - name: Upload Symbols
         uses: actions/upload-artifact@v4
         with:
-          name: VaraNova-PosAdmin-Symbols
+          name: VaraNova-Symbols
           path: build/app/outputs/symbols
