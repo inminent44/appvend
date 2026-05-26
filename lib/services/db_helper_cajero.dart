@@ -40,7 +40,7 @@ class DBHelperCajero {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4, // Incrementar la versión de la base de datos
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE productos (
@@ -102,6 +102,13 @@ class DBHelperCajero {
             FOREIGN KEY (producto_id) REFERENCES productos (id)
           )
         ''');
+        await db.execute('''
+          CREATE TABLE cierres_turno_importados (
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash  TEXT NOT NULL UNIQUE,
+            fecha TEXT NOT NULL
+          )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -131,6 +138,15 @@ class DBHelperCajero {
               precio      REAL NOT NULL,
               FOREIGN KEY (cuenta_id)   REFERENCES cuentas_abiertas (id),
               FOREIGN KEY (producto_id) REFERENCES productos (id)
+            )
+          ''');
+        }
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cierres_turno_importados (
+              id    INTEGER PRIMARY KEY AUTOINCREMENT,
+              hash  TEXT NOT NULL UNIQUE,
+              fecha TEXT NOT NULL
             )
           ''');
         }
@@ -638,5 +654,91 @@ class DBHelperCajero {
       whereArgs: [cuentaId],
     );
     return CuentaAbierta.fromMap(cuentas.first, items);
+  }
+    // ─── IMPORTAR CIERRE DE TURNO ─────────────────────────────────────────────
+  // Permite que el cajero del turno siguiente descuente del stock
+  // los productos que vendió el cajero del turno anterior.
+
+// solo para claridad
+
+  Future<bool> cierreTurnoYaImportado(String contenido) async {
+    final db = await database;
+    final hash = contenido.length > 64
+        ? contenido.substring(0, 64)
+        : contenido;
+    final res = await db.query(
+      'cierres_turno_importados',
+      where: 'hash = ?',
+      whereArgs: [hash],
+      limit: 1,
+    );
+    return res.isNotEmpty;
+  }
+
+  Future<void> _registrarCierreTurnoImportado(String contenido) async {
+    final db = await database;
+    final hash = contenido.length > 64
+        ? contenido.substring(0, 64)
+        : contenido;
+    final fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    await db.insert(
+      'cierres_turno_importados',
+      {'hash': hash, 'fecha': fecha},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Importa el cierre `.gv` del turno anterior y descuenta el stock.
+  /// Devuelve el número de productos procesados.
+  /// Lanza [Exception] si el archivo ya fue importado o tiene formato incorrecto.
+  Future<int> importarCierreTurno(File archivo) async {
+    final contenido = await archivo.readAsString();
+
+    // ── 1. Verificar duplicado ────────────────────────────────────────────
+    if (await cierreTurnoYaImportado(contenido)) {
+      throw Exception('Este cierre ya fue importado anteriormente.');
+    }
+
+    // ── 2. Desencriptar y parsear XML ─────────────────────────────────────
+    final xmlString = _encrypter.decrypt(
+      enc.Encrypted.fromBase64(contenido),
+      iv: _iv,
+    );
+    final document = XmlDocument.parse(xmlString);
+
+    // ── 3. Acumular cantidades vendidas por producto ───────────────────────
+    final Map<int, double> cantidadesPorProducto = {};
+
+    for (final detalle in document.findAllElements('Detalle')) {
+      final data = _xmlElementToMap(detalle);
+      final productoId = int.tryParse(data['producto_id'].toString());
+      final cantidad = double.tryParse(data['cantidad'].toString());
+      if (productoId == null || cantidad == null) continue;
+      cantidadesPorProducto[productoId] =
+          (cantidadesPorProducto[productoId] ?? 0.0) + cantidad;
+    }
+
+    if (cantidadesPorProducto.isEmpty) {
+      throw Exception(
+        'El archivo no contiene ventas o tiene un formato incorrecto.',
+      );
+    }
+
+    // ── 4. Descontar stock — productos inexistentes se ignoran ────────────
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final entry in cantidadesPorProducto.entries) {
+        await txn.rawUpdate('''
+          UPDATE productos
+          SET stockActual = MAX(0.0, stockActual - ?)
+          WHERE id = ?
+        ''', [entry.value, entry.key]);
+      }
+    });
+
+    // ── 5. Registrar para evitar duplicados ───────────────────────────────
+    await _registrarCierreTurnoImportado(contenido);
+
+    return cantidadesPorProducto.length;
   }
 }

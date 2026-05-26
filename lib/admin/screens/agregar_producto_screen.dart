@@ -4,8 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/producto.dart';
 import '../models/movimiento.dart';
-import '../../../services/db_helper_admin.dart';
-
+import '../../services/db_helper_admin.dart';
 
 class AgregarProductoScreen extends StatefulWidget {
   final Producto? producto;
@@ -17,11 +16,13 @@ class AgregarProductoScreen extends StatefulWidget {
 
 class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   static const Color primaryDark = Color(0xFF084B53);
+  static const Color primaryMid  = Color(0xFF0A6B77);
+  static const Color bgPage      = Color(0xFFF4F6F8);
 
-  final _formKey           = GlobalKey<FormState>();
-  final _idController      = TextEditingController();
-  final _nombreController  = TextEditingController();
-  final _precioController  = TextEditingController();
+  final _formKey            = GlobalKey<FormState>();
+  final _idController       = TextEditingController();
+  final _nombreController   = TextEditingController();
+  final _precioController   = TextEditingController();
   final _cantidadController = TextEditingController();
 
   final _nombreFocus   = FocusNode();
@@ -36,9 +37,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void initState() {
     super.initState();
     if (_esEdicion) {
-      _idController.text     = widget.producto!.id.toString();
-      _nombreController.text = widget.producto!.nombre;
-      _precioController.text = widget.producto!.precioVenta.toString();
+      _idController.text       = widget.producto!.id.toString();
+      _nombreController.text   = widget.producto!.nombre;
+      _precioController.text   = widget.producto!.precioVenta.toString();
     } else {
       _idController.addListener(_buscarProductoPorId);
     }
@@ -80,12 +81,12 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
       if (_esEdicion) {
         await DBHelperAdmin.instance.editarProducto(
-          id:          widget.producto!.id,
-          nombre:      nombre,
+          id: widget.producto!.id,
+          nombre: nombre,
           precioVenta: precio,
         );
-        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
-        final cant      = double.tryParse(cantTexto) ?? 0;
+        final cant = double.tryParse(
+            _cantidadController.text.trim().replaceAll(',', '.')) ?? 0;
         if (cant != 0) {
           await DBHelperAdmin.instance.insertarMovimiento(Movimiento(
             productoId: widget.producto!.id,
@@ -96,15 +97,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           ));
         }
       } else {
-        final idNuevo = int.parse(_idController.text);
+        final idNuevo  = int.parse(_idController.text);
+        final actuales = await DBHelperAdmin.instance.obtenerProductosConStock();
 
-        final actuales   = await DBHelperAdmin.instance.obtenerProductosConStock();
-        final idOcupado  = actuales.any((p) => p['id'] == idNuevo);
-        if (idOcupado) {
+        if (actuales.any((p) => p['id'] == idNuevo)) {
           setState(() { _cargando = false; _idDuplicado = true; });
           return;
         }
-
         if (actuales.length >= 150) {
           setState(() => _cargando = false);
           if (!mounted) return;
@@ -115,8 +114,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         final producto = Producto(id: idNuevo, nombre: nombre, precioVenta: precio);
         await DBHelperAdmin.instance.insertarProducto(producto);
 
-        final cantTexto = _cantidadController.text.trim().replaceAll(',', '.');
-        final cant      = double.tryParse(cantTexto) ?? 0;
+        final cant = double.tryParse(
+            _cantidadController.text.trim().replaceAll(',', '.')) ?? 0;
         if (cant != 0) {
           await DBHelperAdmin.instance.insertarMovimiento(Movimiento(
             productoId: producto.id,
@@ -133,32 +132,98 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _cargando = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al guardar: $e'),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
     }
   }
 
   Future<void> _eliminarProducto() async {
-    final confirmar = await showDialog<bool>(
+    final confirmar = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar producto'),
-        content: Text(
-            '¿Eliminar "${widget.producto!.nombre}" y todos sus movimientos?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Eliminar'),
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(
+            24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Handle
+          Container(margin: const EdgeInsets.only(bottom: 20),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2))),
+
+          // Ícono
+          Container(width: 60, height: 60,
+            decoration: BoxDecoration(
+              color: Colors.red.shade50, shape: BoxShape.circle),
+            child: Icon(Icons.delete_outline,
+                color: Colors.red.shade600, size: 28)),
+          const SizedBox(height: 12),
+
+          const Text('Eliminar producto',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A2E))),
+          const SizedBox(height: 8),
+          Text(
+            '¿Eliminar "${widget.producto!.nombre}" y todos sus movimientos?\n'
+            'Esta acción no se puede deshacer.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.5),
           ),
-        ],
+          const SizedBox(height: 24),
+
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey.shade600,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  elevation: 3,
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('Eliminar',
+                        style: TextStyle(fontWeight: FontWeight.bold,
+                            fontSize: 15)),
+                  ],
+                ),
+              ),
+            ),
+          ]),
+        ]),
       ),
     );
+
     if (confirmar != true) return;
     await DBHelperAdmin.instance.eliminarProducto(widget.producto!.id);
     if (!mounted) return;
@@ -168,13 +233,28 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void _mostrarAlertaLimite() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Límite de Productos'),
-        content: const Text('Has alcanzado el límite de 150 productos.'),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(width: 36, height: 36,
+            decoration: BoxDecoration(
+                color: Colors.red.shade50, shape: BoxShape.circle),
+            child: const Icon(Icons.lock_outline, color: Colors.red, size: 18)),
+          const SizedBox(width: 12),
+          const Text('Límite alcanzado', style: TextStyle(fontSize: 17)),
+        ]),
+        content: const Text('Has alcanzado el límite de 150 productos.\n'
+            'Contacta a VaraNova para obtener más capacidad.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryDark, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
         ],
       ),
     );
@@ -183,166 +263,311 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_esEdicion ? 'Editar Producto' : 'Nuevo Producto'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
-        actions: _esEdicion
-            ? [
+      backgroundColor: bgPage,
+      body: Column(
+        children: [
+          // ── Header gradiente ──────────────────────────────────────────
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [primaryDark, primaryMid],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 4, right: 16, bottom: 20,
+            ),
+            child: Row(
+              children: [
                 IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: _eliminarProducto,
-                )
-              ]
-            : null,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // ── Campo ID ──────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.only(bottom: 15),
-                child: TextFormField(
-                  controller: _idController,
-                  enabled: !_esEdicion,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: InputDecoration(
-                    labelText: 'Código / ID',
-                    border: const OutlineInputBorder(),
-                    filled: _esEdicion || _idDuplicado,
-                    fillColor:
-                        _idDuplicado ? Colors.red[50] : Colors.grey[200],
-                    errorText: _idDuplicado
-                        ? 'Este ID ya existe — bórralo o elige otro'
-                        : null,
-                    errorStyle: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.w500),
-                    enabledBorder: _idDuplicado
-                        ? const OutlineInputBorder(
-                            borderSide:
-                                BorderSide(color: Colors.red, width: 1.5))
-                        : const OutlineInputBorder(),
-                    focusedBorder: _idDuplicado
-                        ? const OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.red, width: 2))
-                        : const OutlineInputBorder(
-                            borderSide: BorderSide(
-                                color: Color(0xFF084B53), width: 2)),
-                    suffixIcon: _idDuplicado
-                        ? const Icon(Icons.error_outline, color: Colors.red)
-                        : _esEdicion
-                            ? const Icon(Icons.lock_outline,
-                                color: Colors.grey, size: 18)
-                            : null,
-                    helperText:
-                        _esEdicion ? 'El ID no se puede modificar' : null,
-                  ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Requerido' : null,
+                  icon: const Icon(Icons.arrow_back_ios_new,
+                      color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(context),
                 ),
-              ),
-
-              _buildTextField(
-                _nombreController,
-                'Nombre del producto',
-                enabled: !_idDuplicado,
-                focusNode: _nombreFocus,
-                nextFocus: _precioFocus,
-              ),
-
-              _buildTextField(
-                _precioController,
-                'Precio de Venta',
-                enabled: !_idDuplicado,
-                isNumber: true,
-                focusNode: _precioFocus,
-                nextFocus: _cantidadFocus,
-              ),
-
-              if (!_esEdicion)
-                _buildTextField(
-                  _cantidadController,
-                  'Stock Inicial',
-                  enabled: !_idDuplicado,
-                  isNumber: true,
-                  focusNode: _cantidadFocus,
-                ),
-
-              if (_esEdicion)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 15),
-                  child: TextFormField(
-                    controller: _cantidadController,
-                    focusNode: _cantidadFocus,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true, signed: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[-\d,.]'))
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _esEdicion ? 'Editar Producto' : 'Nuevo Producto',
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _esEdicion
+                            ? 'Modifica nombre, precio o stock'
+                            : 'Agrega un producto al inventario',
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12),
+                      ),
                     ],
-                    decoration: const InputDecoration(
-                      labelText: 'Ajuste de stock (+ entrada / - salida)',
-                      border: OutlineInputBorder(),
-                      helperText:
-                          'Negativo para reducir, positivo para agregar',
+                  ),
+                ),
+                // Botón eliminar solo en edición
+                if (_esEdicion)
+                  GestureDetector(
+                    onTap: _eliminarProducto,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.delete_outline,
+                          color: Colors.white, size: 20),
                     ),
                   ),
-                ),
+              ],
+            ),
+          ),
 
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryDark,
-                      foregroundColor: Colors.white),
-                  onPressed: (_cargando || _idDuplicado) ? null : _guardar,
-                  child: _cargando
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(_esEdicion ? 'ACTUALIZAR' : 'GUARDAR'),
+          // ── Formulario ────────────────────────────────────────────────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    // ── Sección identificación ────────────────────────
+                    _seccionLabel('Identificación'),
+                    const SizedBox(height: 10),
+
+                    // Campo ID
+                    _buildCard(
+                      child: TextFormField(
+                        controller: _idController,
+                        enabled: !_esEdicion,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Código / ID',
+                          border: InputBorder.none,
+                          prefixIcon: Icon(
+                            _esEdicion
+                                ? Icons.lock_outline
+                                : Icons.tag,
+                            color: _idDuplicado
+                                ? Colors.red
+                                : primaryDark,
+                            size: 20,
+                          ),
+                          errorText: _idDuplicado
+                              ? 'Este ID ya existe'
+                              : null,
+                          helperText: _esEdicion
+                              ? 'El ID no se puede modificar'
+                              : null,
+                        ),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Requerido'
+                            : null,
+                      ),
+                      error: _idDuplicado,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Campo nombre
+                    _buildCard(
+                      child: TextFormField(
+                        controller: _nombreController,
+                        focusNode: _nombreFocus,
+                        enabled: !_idDuplicado,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Nombre del producto',
+                          border: InputBorder.none,
+                          prefixIcon: Icon(Icons.inventory_2_outlined,
+                              color: primaryDark, size: 20),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Requerido'
+                            : null,
+                        onEditingComplete: () =>
+                            _precioFocus.requestFocus(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ── Sección precio ────────────────────────────────
+                    _seccionLabel('Precio'),
+                    const SizedBox(height: 10),
+
+                    _buildCard(
+                      child: TextFormField(
+                        controller: _precioController,
+                        focusNode: _precioFocus,
+                        enabled: !_idDuplicado,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d*'))
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Precio de venta',
+                          border: InputBorder.none,
+                          prefixIcon: Icon(Icons.attach_money,
+                              color: primaryDark, size: 20),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Requerido'
+                            : null,
+                        onEditingComplete: () =>
+                            _cantidadFocus.requestFocus(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ── Sección stock ─────────────────────────────────
+                    _seccionLabel(
+                        _esEdicion ? 'Ajuste de Stock' : 'Stock Inicial'),
+                    const SizedBox(height: 10),
+
+                    _buildCard(
+                      child: TextFormField(
+                        controller: _cantidadController,
+                        focusNode: _cantidadFocus,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(
+                                decimal: true, signed: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'[-\d,.]'))
+                        ],
+                        decoration: InputDecoration(
+                          labelText: _esEdicion
+                              ? 'Ajuste (+ agregar / - quitar)'
+                              : 'Cantidad inicial en stock',
+                          border: InputBorder.none,
+                          prefixIcon: const Icon(
+                              Icons.layers_outlined,
+                              color: primaryDark, size: 20),
+                          helperText: _esEdicion
+                              ? 'Usa negativo para reducir stock'
+                              : 'Opcional — puedes dejarlo en 0',
+                        ),
+                        // No requerido
+                      ),
+                    ),
+
+                    // Info edición
+                    if (_esEdicion) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.blue.shade400, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'El ajuste se suma al stock actual. '
+                                'Deja en 0 si no quieres modificar el stock.',
+                                style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontSize: 11, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 36),
+
+                    // ── Botón guardar ─────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              (_cargando || _idDuplicado)
+                                  ? Colors.grey.shade300
+                                  : primaryDark,
+                          foregroundColor: Colors.white,
+                          elevation: (_cargando || _idDuplicado) ? 0 : 3,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed:
+                            (_cargando || _idDuplicado) ? null : _guardar,
+                        child: _cargando
+                            ? const SizedBox(
+                                width: 22, height: 22,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2.5))
+                            : Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(_esEdicion
+                                      ? Icons.check_circle_outline
+                                      : Icons.add_circle_outline,
+                                      size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _esEdicion ? 'ACTUALIZAR' : 'GUARDAR',
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label, {
-    bool isNumber = false,
-    bool enabled  = true,
-    FocusNode? focusNode,
-    FocusNode? nextFocus,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: TextFormField(
-        controller:  controller,
-        focusNode:   focusNode,
-        enabled:     enabled,
-        keyboardType: isNumber
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        inputFormatters: isNumber
-            ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
-            : null,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          filled:    !enabled,
-          fillColor: Colors.grey[100],
-        ),
-        validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
-        onEditingComplete:
-            nextFocus != null ? () => nextFocus.requestFocus() : null,
+  // ── Helpers de UI ─────────────────────────────────────────────────────────
+
+  Widget _seccionLabel(String label) {
+    return Text(label,
+        style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade500,
+            letterSpacing: 0.8));
+  }
+
+  Widget _buildCard({required Widget child, bool error = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: error ? Border.all(color: Colors.red.shade300, width: 1.5) : null,
+        boxShadow: [BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 8, offset: const Offset(0, 3),
+        )],
       ),
+      child: child,
     );
   }
 }

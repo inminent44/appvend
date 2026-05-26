@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/db_helper_cajero.dart';
@@ -19,6 +21,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
   Map<String, dynamic>? _resumen;
   bool _cargando = false;
   bool _turnoCerrado = false;
+  bool _importando = false; // Nueva variable de estado
 
   @override
   void initState() {
@@ -49,6 +52,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
   }
 
   Future<void> _exportarCierre() async {
+    setState(() => _importando = true);
     try {
       await DBHelperCajero.instance.exportarCierreCaja();
       if (!mounted) return;
@@ -62,6 +66,45 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al exportar: $e')),
       );
+    } finally {
+      if(mounted) {
+        setState(() => _importando = false);
+      }
+    }
+  }
+
+  Future<void> _importarCierreTurno() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+    if (result == null || result.files.single.path == null) return;
+
+    setState(() => _importando = true);
+    try {
+      final file = File(result.files.single.path!);
+      final productosRebajados =
+          await DBHelperCajero.instance.importarCierreTurno(file);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Cierre importado: $productosRebajados producto(s) descontados ✓'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      await _cargarDatos();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _importando = false);
     }
   }
 
@@ -202,7 +245,7 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton.icon(
-                      onPressed: (!hayVentas || _turnoCerrado)
+                      onPressed: (!hayVentas || _turnoCerrado || _importando)
                           ? null
                           : _exportarCierre,
                       style: ElevatedButton.styleFrom(
@@ -212,10 +255,16 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: const Icon(Icons.share),
-                      label: const Text(
-                        'EXPORTAR CIERRE AL ADMIN',
-                        style: TextStyle(
+                      icon: _importando
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                            )
+                          : const Icon(Icons.share),
+                      label: Text(
+                        _importando ? 'EXPORTANDO...' : 'EXPORTAR CIERRE AL ADMIN',
+                        style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -228,6 +277,46 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
                           : 'Envía este archivo al Admin para actualizar el inventario.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // ── Botón importar cierre de turno anterior ───────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton.icon(
+                      onPressed: _importando ? null : _importarCierreTurno,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1B7A84),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: _importando
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.download_for_offline_outlined),
+                      label: Text(
+                        _importando ? 'IMPORTANDO...' : 'IMPORTAR CIERRE DE TURNO',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Center(
+                    child: Text(
+                      'Importa el cierre del turno anterior para actualizar tu inventario.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ),
                   const SizedBox(height: 20),

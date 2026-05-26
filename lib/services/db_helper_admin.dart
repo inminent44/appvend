@@ -257,14 +257,22 @@ class DBHelperAdmin {
         );
 
         // Registrar el movimiento de salida de stock en el admin
-        final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        await txn.insert('movimientos', {
-          'producto_id': prodId,
-          'cantidad':    -cantidad,
-          'fecha':       hoy,
-          'tipo':        'venta_cajero',
-          'nota':        'Cierre importado: $nombreArchivo',
-        });
+        final productoExiste = await txn.query(
+          'productos',
+          where: 'id = ?',
+          whereArgs: [prodId],
+          limit: 1,
+        );
+        if (productoExiste.isNotEmpty) {
+          final hoy = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          await txn.insert('movimientos', {
+            'producto_id': prodId,
+            'cantidad':    -cantidad,
+            'fecha':       hoy,
+            'tipo':        'venta_cajero',
+            'nota':        'Cierre importado: $nombreArchivo',
+          });
+        }
       }
     });
   }
@@ -324,39 +332,38 @@ class DBHelperAdmin {
 
   // ─── BACKUP ────────────────────────────────────────────────────────────────
 
-  Future<String> exportarBackup() async {
-    final db         = await database;
-    final productos  = await db.query('productos');
-    final movimientos = await db.query('movimientos');
-    final cierres    = await db.query('cierres_importados');
-    final ventas     = await db.query('ventas_importadas');
-    final detalles   = await db.query('detalle_venta_importada');
+  Future<void> exportarBackup() async {
+  final db          = await database;
+  final productos   = await db.query('productos');
+  final movimientos = await db.query('movimientos');
+  final cierres     = await db.query('cierres_importados');
+  final ventas      = await db.query('ventas_importadas');
+  final detalles    = await db.query('detalle_venta_importada');
 
-    final builder = XmlBuilder();
-    builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-    builder.element('Backup', nest: () {
-      _escribirTabla(builder, 'Productos',    'Producto',    productos);
-      _escribirTabla(builder, 'Movimientos',  'Movimiento',  movimientos);
-      _escribirTabla(builder, 'Cierres',      'Cierre',      cierres);
-      _escribirTabla(builder, 'Ventas',       'Venta',       ventas);
-      _escribirTabla(builder, 'Detalles',     'Detalle',     detalles);
-    });
+  final builder = XmlBuilder();
+  builder.processing('xml', 'version="1.0" encoding="UTF-8"');
+  builder.element('Backup', nest: () {
+    _escribirTabla(builder, 'Productos',   'Producto',   productos);
+    _escribirTabla(builder, 'Movimientos', 'Movimiento', movimientos);
+    _escribirTabla(builder, 'Cierres',     'Cierre',     cierres);
+    _escribirTabla(builder, 'Ventas',      'Venta',      ventas);
+    _escribirTabla(builder, 'Detalles',    'Detalle',    detalles);
+  });
 
-    final xmlStr    = builder.buildDocument().toXmlString();
-    final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
-    final hoy       = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+  final xmlStr    = builder.buildDocument().toXmlString();
+  final encrypted = _encrypter.encrypt(xmlStr, iv: _iv);
+  final hoy       = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
 
-    Directory? destDir;
-    if (Platform.isAndroid) {
-      destDir = await getExternalStorageDirectory() ?? await getTemporaryDirectory();
-    } else {
-      destDir = await getApplicationDocumentsDirectory();
-    }
+  // ── Siempre a temp → share sheet → el usuario elige dónde guardar
+  final dir  = await getTemporaryDirectory();
+  final file = File('${dir.path}/backup_admin_$hoy.bkp');
+  await file.writeAsString(encrypted.base64);
 
-    final file = File('${destDir.path}/backup_admin_$hoy.bkp');
-    await file.writeAsString(encrypted.base64);
-    return file.path;
-  }
+  await Share.shareXFiles(
+    [XFile(file.path)],
+    text: 'Backup VaraNova Admin — $hoy',
+  );
+}
 
   Future<void> restaurarBackup(File archivo) async {
     final db        = await database;

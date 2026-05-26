@@ -1,160 +1,76 @@
 import 'package:flutter/material.dart';
 import '../models/producto.dart';
-import '../../../services/db_helper_admin.dart';
+import '../../services/db_helper_admin.dart';
 import 'agregar_producto_screen.dart';
-
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
-
   @override
   State<InventarioScreen> createState() => _InventarioScreenState();
 }
 
 class _InventarioScreenState extends State<InventarioScreen> {
-  static const Color primaryDark      = Color(0xFF084B53);
-  static const int   _limiteMaximo    = 150;
-  static const int   _limiteAdvertencia = 145;
+  static const Color primaryDark = Color(0xFF084B53);
+  static const Color primaryMid  = Color(0xFF0A6B77);
+  static const Color bgPage      = Color(0xFFF4F6F8);
+  static const int _limiteMax    = 150;
+  static const int _limiteAdvert = 145;
 
-  final TextEditingController _searchController = TextEditingController();
+  final _searchCtrl = TextEditingController();
 
-  List<Map<String, dynamic>> _productos          = [];
-  List<Map<String, dynamic>> _productosFiltrados = [];
+  List<Map<String, dynamic>> _productos = [];
+  List<Map<String, dynamic>> _filtrados = [];
   bool _cargando = true;
 
   @override
-  void initState() {
-    super.initState();
-    _cargarProductos();
-  }
+  void initState() { super.initState(); _cargar(); }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
-  Future<void> _cargarProductos() async {
+  Future<void> _cargar() async {
     setState(() => _cargando = true);
     final data = await DBHelperAdmin.instance.obtenerProductosConStock();
     if (!mounted) return;
     setState(() {
       _productos = data;
-      _productosFiltrados = _searchController.text.isEmpty
-          ? data
-          : _aplicarFiltro(data, _searchController.text);
-      _cargando = false;
+      _filtrados = _aplicarFiltro(data, _searchCtrl.text);
+      _cargando  = false;
     });
   }
 
-  List<Map<String, dynamic>> _aplicarFiltro(
-      List<Map<String, dynamic>> lista, String query) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return lista;
-    return lista.where((p) {
-      final porNombre = p['nombre'].toString().toLowerCase().contains(q);
-      final porId     = p['id'].toString() == q;
-      return porNombre || porId;
-    }).toList();
+  List<Map<String, dynamic>> _aplicarFiltro(List<Map<String, dynamic>> lista, String q) {
+    final query = q.trim().toLowerCase();
+    if (query.isEmpty) return lista;
+    return lista.where((p) =>
+      p['nombre'].toString().toLowerCase().contains(query) ||
+      p['id'].toString() == query
+    ).toList();
   }
 
-  void _filtrar(String query) {
-    setState(() {
-      _productosFiltrados = _aplicarFiltro(_productos, query);
-    });
-  }
+  void _filtrar(String q) =>
+      setState(() => _filtrados = _aplicarFiltro(_productos, q));
 
   Future<void> _irAEditar(Map<String, dynamic> item) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AgregarProductoScreen(producto: Producto.fromMap(item)),
-      ),
-    );
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => AgregarProductoScreen(producto: Producto.fromMap(item)),
+    ));
     if (!mounted) return;
-    _cargarProductos();
+    _cargar();
   }
 
   Future<void> _irAAgregar() async {
-    final total = _productos.length;
-
-    if (total >= _limiteMaximo) {
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.lock_outline, color: Colors.red, size: 26),
-              SizedBox(width: 10),
-              Text('Límite alcanzado',
-                  style: TextStyle(color: Colors.red, fontSize: 18)),
-            ],
-          ),
-          content: const Text(
-            'Has alcanzado el límite de 150 productos permitidos en esta versión.\n\n'
-            'Para gestionar más productos, contacta a VaraNova y obtén la versión Básica Plus.',
-            style: TextStyle(fontSize: 14, height: 1.5),
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey,
-                  side: const BorderSide(color: Colors.grey)),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      );
-      return;
+    if (_productos.length >= _limiteMax) {
+      _mostrarLimiteDialog(); return;
     }
-
-    if (total >= _limiteAdvertencia) {
-      final restantes = _limiteMaximo - total;
-      final continuar = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 26),
-              SizedBox(width: 10),
-              Text('Casi en el límite',
-                  style: TextStyle(color: Colors.orange, fontSize: 18)),
-            ],
-          ),
-          content: Text(
-            'Te ${restantes == 1 ? 'queda solo 1 producto disponible' : 'quedan $restantes productos disponibles'} '
-            'en esta versión (límite: $_limiteMaximo).\n\n'
-            '¿Deseas continuar?',
-            style: const TextStyle(fontSize: 14, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryDark,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8))),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Continuar'),
-            ),
-          ],
-        ),
-      );
-      if (continuar != true || !mounted) return;
+    if (_productos.length >= _limiteAdvert) {
+      final ok = await _mostrarAdvertenciaDialog();
+      if (ok != true || !mounted) return;
     }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AgregarProductoScreen()),
-    );
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const AgregarProductoScreen(),
+    ));
     if (!mounted) return;
-    _cargarProductos();
+    _cargar();
   }
 
   Future<void> _exportarInventario() async {
@@ -169,213 +85,362 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   Future<void> _confirmarEliminar(Map<String, dynamic> item) async {
-    final confirm = await showDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar producto'),
-        content: Text('¿Seguro que deseas eliminar "${item['nombre']}"?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Eliminar'),
-          ),
-        ],
+      builder: (_) => _ConfirmDialog(
+        titulo: 'Eliminar producto',
+        mensaje: '¿Eliminar "${item['nombre']}"? Esta acción no se puede deshacer.',
+        labelConfirm: 'Eliminar',
+        destructivo: true,
       ),
     );
-    if (confirm != true) return;
+    if (ok != true) return;
     await DBHelperAdmin.instance.eliminarProducto(item['id'] as int);
     if (!mounted) return;
-    _cargarProductos();
+    _cargar();
   }
+
+  void _mostrarLimiteDialog() => showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(children: [
+        Container(width: 36, height: 36,
+          decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+          child: const Icon(Icons.lock_outline, color: Colors.red, size: 18)),
+        const SizedBox(width: 12),
+        const Text('Límite alcanzado', style: TextStyle(fontSize: 17)),
+      ]),
+      content: const Text('Alcanzaste el límite de 150 productos.\nContacta a VaraNova para más.'),
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: primaryDark, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Entendido'),
+        ),
+      ],
+    ),
+  );
+
+  Future<bool?> _mostrarAdvertenciaDialog() => showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(children: [
+        Container(width: 36, height: 36,
+          decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle),
+          child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18)),
+        const SizedBox(width: 12),
+        const Text('Casi en el límite', style: TextStyle(fontSize: 17)),
+      ]),
+      content: Text('Quedan ${_limiteMax - _productos.length} lugares disponibles. ¿Continuar?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: primaryDark, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Continuar'),
+        ),
+      ],
+    ),
+  );
+
+  // ── colores por índice ──
+  static const _colores = [
+    Color(0xFF084B53), Color(0xFFE53935), Color(0xFFF57C00),
+    Color(0xFF7B1FA2), Color(0xFF1565C0), Color(0xFF2E7D32),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inventario / Stock'),
-        backgroundColor: primaryDark,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Actualizar',
-            onPressed: _cargarProductos,
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Exportar al cajero',
-            onPressed: _exportarInventario,
-          ),
-        ],
-      ),
+      backgroundColor: bgPage,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Buscar por nombre o ID...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+          // ── Header gradiente ──────────────────────────────────────
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [primaryDark, primaryMid],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              onChanged: _filtrar,
+            ),
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 20, right: 20, bottom: 20,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Inventario', style: TextStyle(
+                              color: Colors.white, fontSize: 22,
+                              fontWeight: FontWeight.bold)),
+                          Text('Productos y stock', style: TextStyle(
+                              color: Colors.white60, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    _headerBtn(Icons.upload_file, 'Exportar', _exportarInventario),
+                    const SizedBox(width: 8),
+                    _headerBtn(Icons.refresh, '', _cargar),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Buscador integrado en header
+                Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: _filtrar,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por nombre o ID...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Chips de stats
+                Row(
+                  children: [
+                    _statChip(Icons.inventory_2_outlined,
+                        '${_productos.length}/$_limiteMax productos'),
+                    if (_productos.length >= _limiteAdvert) ...[
+                      const SizedBox(width: 8),
+                      _statChip(Icons.warning_amber_rounded,
+                          '${_limiteMax - _productos.length} restantes',
+                          color: Colors.orange.shade200),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ),
-          if (!_cargando) _buildBannerLimite(),
+
+          // ── Lista ──────────────────────────────────────────────────
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
-                : _productosFiltrados.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                size: 80, color: Colors.grey),
-                            SizedBox(height: 12),
-                            Text('Sin productos',
-                                style: TextStyle(color: Colors.grey)),
-                          ],
-                        ),
-                      )
+                : _filtrados.isEmpty
+                    ? _emptyState()
                     : ListView.builder(
-                        itemCount: _productosFiltrados.length,
-                        itemBuilder: (context, index) {
-                          final item = _productosFiltrados[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 5),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: primaryDark,
-                                    child: Text('${item['id']}',
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 12)),
-                                  ),
-                                  title: Text(item['nombre'],
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                  subtitle: Text(
-                                      'Stock: ${(item['stockActual'] as num).toStringAsFixed(0)}'),
-                                  trailing: Text(
-                                      '\$${(item['precioVenta'] as num).toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16)),
-                                  onTap: () => _irAEditar(item),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text('Editar'),
-                                      onPressed: () => _irAEditar(item),
-                                    ),
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.delete,
-                                          size: 16, color: Colors.red),
-                                      label: const Text('Eliminar',
-                                          style: TextStyle(color: Colors.red)),
-                                      onPressed: () =>
-                                          _confirmarEliminar(item),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                        itemCount: _filtrados.length,
+                        itemBuilder: (_, i) => _productoCard(_filtrados[i], i),
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _irAAgregar,
-        backgroundColor:
-            _productos.length >= _limiteMaximo ? Colors.grey : primaryDark,
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: _productos.length >= _limiteMax ? Colors.grey : primaryDark,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Nuevo', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  Widget _buildBannerLimite() {
-    final total = _productos.length;
-
-    if (total >= _limiteMaximo) {
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+  Widget _headerBtn(IconData icon, String tooltip, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40, height: 40,
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.red.shade200),
+          color: Colors.white.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
-          children: [
-            Icon(Icons.lock_outline, color: Colors.red, size: 18),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Límite de 150 productos alcanzado. Contacta a VaraNova para la versión Básica Plus.',
-                style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
 
-    if (total >= _limiteAdvertencia) {
-      final restantes = _limiteMaximo - total;
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.orange.shade200),
-        ),
+  Widget _statChip(IconData icon, String label, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: color ?? Colors.white70, size: 13),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(color: color ?? Colors.white, fontSize: 11)),
+      ]),
+    );
+  }
+
+  Widget _productoCard(Map<String, dynamic> item, int index) {
+    final color  = _colores[index % _colores.length];
+    final stock  = (item['stockActual'] as num).toDouble();
+    final precio = (item['precioVenta'] as num).toDouble();
+    final stockBajo = stock < 5;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 8, offset: const Offset(0, 3),
+        )],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.orange, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Casi en el límite: $total/150 productos. '
-                '${restantes == 1 ? 'Solo queda 1 lugar.' : 'Quedan $restantes lugares.'}',
-                style: const TextStyle(
-                    color: Colors.orange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
+            // Avatar letra
+            Container(
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(13),
               ),
+              child: Center(
+                child: Text(
+                  item['nombre'].toString().substring(0, 1).toUpperCase(),
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item['nombre'],
+                      style: const TextStyle(fontWeight: FontWeight.bold,
+                          fontSize: 14, color: Color(0xFF1A1A2E))),
+                  const SizedBox(height: 3),
+                  Row(children: [
+                    Text('ID ${item['id']}',
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: stockBajo ? Colors.red.shade50 : Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Stock: ${stock.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w600,
+                          color: stockBajo ? Colors.red.shade700 : Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+
+            // Precio + acciones
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('\$${precio.toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: Color(0xFF084B53))),
+                const SizedBox(height: 6),
+                Row(children: [
+                  _accionBtn(Icons.edit_outlined, primaryDark,
+                      () => _irAEditar(item)),
+                  const SizedBox(width: 6),
+                  _accionBtn(Icons.delete_outline, Colors.red.shade400,
+                      () => _confirmarEliminar(item)),
+                ]),
+              ],
             ),
           ],
         ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-      child: Text(
-        '$total / $_limiteMaximo productos',
-        style: const TextStyle(color: Colors.grey, fontSize: 12),
       ),
+    );
+  }
+
+  Widget _accionBtn(IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30, height: 30,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: color, size: 16),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 80, height: 80,
+          decoration: BoxDecoration(
+            color: const Color(0xFF084B53).withOpacity(0.07),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.inventory_2_outlined, size: 36, color: primaryDark),
+        ),
+        const SizedBox(height: 16),
+        const Text('Sin productos', style: TextStyle(fontSize: 18,
+            fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
+        const SizedBox(height: 8),
+        Text(_searchCtrl.text.isEmpty
+            ? 'Toca "Nuevo" para agregar el primer producto'
+            : 'No hay resultados para "${_searchCtrl.text}"',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+      ]),
+    );
+  }
+}
+
+// ── Dialog reutilizable ───────────────────────────────────────────────────────
+class _ConfirmDialog extends StatelessWidget {
+  final String titulo, mensaje, labelConfirm;
+  final bool destructivo;
+  const _ConfirmDialog({
+    required this.titulo, required this.mensaje,
+    required this.labelConfirm, this.destructivo = false,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(titulo, style: const TextStyle(fontSize: 17)),
+      content: Text(mensaje),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: destructivo ? Colors.red : const Color(0xFF084B53),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(labelConfirm),
+        ),
+      ],
     );
   }
 }

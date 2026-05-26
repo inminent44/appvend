@@ -1,91 +1,67 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static final AuthService instance = AuthService._internal();
-  factory AuthService() => instance;
-  AuthService._internal();
+  static const String _passwordKey = 'admin_password';
+  static const String _loggedInKey = 'is_logged_in';
 
-  static const String _keyUsuario = 'sesion_usuario';
-  static const String _keyPassword = 'admin_password';
-  static const String _keyPregunta = 'recup_pregunta';
-  static const String _keyRespuesta = 'recup_respuesta';
+  // Contraseña por defecto, cámbiala por una más segura
+  static const String _defaultPassword = '1234';
 
-  bool _sesionActiva = false;
-  bool get sesionActiva => _sesionActiva;
-  bool _esGestorV = false;
-  bool get esGestorV => _esGestorV;
+  // --- Lógica de Superusuario (GestorV) ---
 
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    return sha256.convert(bytes).toString();
-  }
+  // Flag para saber si la sesión actual es de superusuario
+  static bool _isGestorV = false;
 
-  Future<bool> verificarSesion() async {
+  /// Devuelve true si el usuario logueado es el superusuario GestorV.
+  static bool get esGestorV => _isGestorV;
+
+  // Contraseña secreta para acceder como superusuario. No se guarda ni se cambia.
+  static const String _gestorVPassword = 'Gandalf*123';
+
+  // ----------------------------------------
+
+  static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final activa = prefs.getString(_keyUsuario) != null;
-    _sesionActiva = activa;
-    return activa;
+    if (prefs.getString(_passwordKey) == null) {
+      await prefs.setString(_passwordKey, _defaultPassword);
+    }
   }
 
-  /// Login simplificado — la app Admin solo tiene UN admin.
-  Future<bool> login(String password) async {
-    // Superusuario de emergencia
-    if (password == 'Gandalf*123') {
-      _sesionActiva = true;
-      _esGestorV = true;
+  static Future<bool> login(String password) async {
+    // Primero, verificar si la contraseña es la del superusuario
+    if (password == _gestorVPassword) {
+      _isGestorV = true; // Marcar la sesión como superusuario
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyUsuario, 'gestorv');
+      await prefs.setBool(_loggedInKey, true);
       return true;
     }
+
+    // Si no, es un login normal. Resetear el flag de superusuario.
+    _isGestorV = false;
 
     final prefs = await SharedPreferences.getInstance();
-    final hashGuardado = prefs.getString(_keyPassword);
-    if (hashGuardado == null) return false;
-
-    if (_hashPassword(password) == hashGuardado) {
-      _sesionActiva = true;
-      await prefs.setString(_keyUsuario, 'admin');
+    final storedPassword = prefs.getString(_passwordKey) ?? _defaultPassword;
+    if (password == storedPassword) {
+      await prefs.setBool(_loggedInKey, true);
       return true;
     }
+
     return false;
   }
 
-  Future<void> logout() async {
-    _sesionActiva = false;
-    _esGestorV = false;
+  static Future<void> logout() async {
+    _isGestorV = false; // Limpiar el flag de superusuario al salir
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyUsuario);
+    await prefs.setBool(_loggedInKey, false);
   }
 
-  Future<bool> estaRegistrado() async {
+  static Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyPassword) != null;
+    return prefs.getBool(_loggedInKey) ?? false;
   }
 
-  Future<void> registrarAdminInicial(
-      String password, String pregunta, String respuesta) async {
+  static Future<void> setPassword(String newPassword) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyPassword, _hashPassword(password));
-    await prefs.setString(_keyPregunta, pregunta);
-    await prefs.setString(
-        _keyRespuesta, _hashPassword(respuesta.toLowerCase().trim()));
-  }
-
-  Future<String?> obtenerPregunta() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyPregunta);
-  }
-
-  Future<bool> validarRecuperacion(String respuesta) async {
-    final prefs = await SharedPreferences.getInstance();
-    final resGuardada = prefs.getString(_keyRespuesta);
-    return resGuardada == _hashPassword(respuesta.toLowerCase().trim());
-  }
-
-  Future<void> actualizarPassword(String nuevaPassword) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyPassword, _hashPassword(nuevaPassword));
+    await prefs.setString(_passwordKey, newPassword);
   }
 }

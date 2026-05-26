@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/license_service.dart';
+import '../../services/license_service.dart';
 
 /// Pantalla de activación compartida entre modo Admin y modo Cajero.
 ///

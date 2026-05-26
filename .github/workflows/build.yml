@@ -25,20 +25,25 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # ── BUILD ────────────────────────────────────────
-      - name: Build Obfuscated APK
-        run: |
-          flutter build apk --release
+      # ── BUILD CAJA ────────────────────────────────────
+      - name: Build APK VaraNova Caja
+        run: flutter build apk --release --flavor caja
 
-      # ── ARTIFACTS ────────────────────────────────────
-      - name: Upload APK
+      # ── BUILD ADMIN ───────────────────────────────────
+      - name: Build APK VaraNova Admin
+        run: flutter build apk --release --flavor admin
+
+      # ── ARTIFACTS ─────────────────────────────────────
+      - name: Upload APK Caja
         uses: actions/upload-artifact@v4
         with:
-          name: VaraNova-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: VaraNova-Caja
+          path: build/app/outputs/flutter-apk/app-caja-release.apk
+          retention-days: 30
 
-      - name: Upload Symbols
+      - name: Upload APK Admin
         uses: actions/upload-artifact@v4
         with:
-          name: VaraNova-Symbols
-          path: build/app/outputs/symbols
+          name: VaraNova-Admin
+          path: build/app/outputs/flutter-apk/app-admin-release.apk
+          retention-days: 30
