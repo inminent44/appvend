@@ -199,7 +199,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 Container(
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withAlpha(38),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: TextField(
@@ -208,8 +208,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Buscar por nombre o ID...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                      hintStyle: TextStyle(color: Colors.white.withAlpha(153), fontSize: 14),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withAlpha(178), size: 20),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -263,7 +263,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       child: Container(
         width: 40, height: 40,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
+          color: Colors.white.withAlpha(46),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: Colors.white, size: 20),
@@ -275,7 +275,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withAlpha(30),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -298,7 +298,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withAlpha(13),
           blurRadius: 8, offset: const Offset(0, 3),
         )],
       ),
@@ -310,7 +310,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             Container(
               width: 46, height: 46,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withAlpha(26),
                 borderRadius: BorderRadius.circular(13),
               ),
               child: Center(
@@ -383,7 +383,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       child: Container(
         width: 30, height: 30,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withAlpha(26),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: color, size: 16),
@@ -396,7 +396,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 80, height: 80,
           decoration: BoxDecoration(
-            color: const Color(0xFF084B53).withOpacity(0.07),
+            color: const Color(0xFF084B53).withAlpha(18),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.inventory_2_outlined, size: 36, color: primaryDark),

@@ -105,7 +105,7 @@ class _MainAdminScreenState extends State<MainAdminScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Container(width: 52, height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withAlpha(51),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.shield_moon_outlined,
@@ -149,7 +149,7 @@ class _MainAdminScreenState extends State<MainAdminScreen> {
     return ListTile(
       leading: Container(width: 36, height: 36,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withAlpha(26),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: color, size: 18)),
@@ -191,7 +191,7 @@ class _GestorVSheet extends StatelessWidget {
 
         Container(width: 56, height: 56,
           decoration: BoxDecoration(
-            color: primaryDark.withOpacity(0.08), shape: BoxShape.circle),
+            color: primaryDark.withAlpha(20), shape: BoxShape.circle),
           child: const Icon(Icons.shield_moon_outlined, color: primaryDark, size: 26)),
         const SizedBox(height: 12),
         const Text('Panel GestorV', style: TextStyle(fontSize: 18,
@@ -268,7 +268,7 @@ class _GestorVSheet extends StatelessWidget {
         child: Row(children: [
           Container(width: 40, height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha(26),
               borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, color: color, size: 20)),
           const SizedBox(width: 12),

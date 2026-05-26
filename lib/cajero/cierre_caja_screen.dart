@@ -332,9 +332,9 @@ class _CierreCajaScreenState extends State<CierreCajaScreen> {
       child: Container(
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withAlpha(26),
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withAlpha(77)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

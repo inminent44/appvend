@@ -295,7 +295,7 @@ class CuentasScreenState extends State<CuentasScreen> {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: primaryDark.withOpacity(0.08),
+                  color: primaryDark.withAlpha(20),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.receipt_outlined,

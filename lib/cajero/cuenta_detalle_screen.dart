@@ -244,10 +244,10 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
+                    color: Colors.white.withAlpha(46),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.3)),
+                        color: Colors.white.withAlpha(77)),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -289,7 +289,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withAlpha(30),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -324,7 +324,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withAlpha(13),
               blurRadius: 8,
               offset: const Offset(0, 3)),
         ],
@@ -338,7 +338,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -433,7 +433,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
+          color: color.withAlpha(30),
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: color, size: 16),
@@ -451,7 +451,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.07),
+              color: Colors.black.withAlpha(18),
               blurRadius: 16,
               offset: const Offset(0, -4)),
         ],
@@ -553,7 +553,7 @@ class _CuentaDetalleScreenState extends State<CuentaDetalleScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: primaryDark.withOpacity(0.07),
+              color: primaryDark.withAlpha(18),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.add_shopping_cart_outlined,
@@ -741,7 +741,7 @@ class _ProductoSheetState extends State<_ProductoSheet> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: primaryDark.withOpacity(0.1),
+                              color: primaryDark.withAlpha(26),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
@@ -854,7 +854,7 @@ class _TicketCobro extends StatelessWidget {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: primaryDark.withOpacity(0.08),
+              color: primaryDark.withAlpha(20),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.receipt_long,
@@ -884,7 +884,7 @@ class _TicketCobro extends StatelessWidget {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: primaryDark.withOpacity(0.08),
+                        color: primaryDark.withAlpha(20),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Center(

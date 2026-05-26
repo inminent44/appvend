@@ -110,7 +110,7 @@ class BackupScreen extends StatelessWidget {
             // Ícono + título
             Container(width: 56, height: 56,
               decoration: BoxDecoration(
-                color: primaryDark.withOpacity(0.08), shape: BoxShape.circle),
+                color: primaryDark.withAlpha(20), shape: BoxShape.circle),
               child: const Icon(Icons.lock_reset, color: primaryDark, size: 26)),
             const SizedBox(height: 12),
             const Text('Cambiar Contraseña',
@@ -281,7 +281,7 @@ class BackupScreen extends StatelessWidget {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withAlpha(10),
                       blurRadius: 8, offset: const Offset(0, 3),
                     )],
                   ),
@@ -328,7 +328,7 @@ class BackupScreen extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 8, offset: const Offset(0, 3),
           )],
           border: destructivo
@@ -338,7 +338,7 @@ class BackupScreen extends StatelessWidget {
         child: Row(children: [
           Container(width: 48, height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha(26),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: color, size: 24)),

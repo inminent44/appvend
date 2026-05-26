@@ -312,7 +312,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                     child: Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.25),
+                        color: Colors.red.withAlpha(64),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.delete_outline,
@@ -563,7 +563,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         borderRadius: BorderRadius.circular(14),
         border: error ? Border.all(color: Colors.red.shade300, width: 1.5) : null,
         boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withAlpha(10),
           blurRadius: 8, offset: const Offset(0, 3),
         )],
       ),

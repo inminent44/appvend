@@ -77,7 +77,7 @@ class _BottomNavBar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withAlpha(20),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -100,7 +100,7 @@ class _BottomNavBar extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? primaryDark.withOpacity(0.08)
+                          ? primaryDark.withAlpha(20)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(14),
                     ),

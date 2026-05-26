@@ -153,7 +153,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                     onTap: _cargar,
                     child: Container(width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withAlpha(46),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.refresh, color: Colors.white, size: 20)),
@@ -166,14 +166,14 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withAlpha(38),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    border: Border.all(color: Colors.white.withAlpha(51)),
                   ),
                   child: Row(children: [
                     Container(width: 44, height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withAlpha(51),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.today, color: Colors.white, size: 22)),
@@ -238,7 +238,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withAlpha(13),
           blurRadius: 8, offset: const Offset(0, 3),
         )],
       ),
@@ -247,7 +247,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
         leading: Container(
           width: 46, height: 46,
           decoration: BoxDecoration(
-            color: primaryDark.withOpacity(0.08),
+            color: primaryDark.withAlpha(20),
             borderRadius: BorderRadius.circular(13),
           ),
           child: const Icon(Icons.receipt_long_outlined, color: primaryDark, size: 22),
@@ -263,7 +263,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
         trailing: Container(
           width: 32, height: 32,
           decoration: BoxDecoration(
-            color: primaryDark.withOpacity(0.08),
+            color: primaryDark.withAlpha(20),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.chevron_right, color: primaryDark, size: 18),
@@ -278,7 +278,7 @@ class _CierresAdminScreenState extends State<CierresAdminScreen> {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 80, height: 80,
           decoration: BoxDecoration(
-            color: primaryDark.withOpacity(0.07), shape: BoxShape.circle),
+            color: primaryDark.withAlpha(18), shape: BoxShape.circle),
           child: const Icon(Icons.inbox_outlined, size: 36, color: primaryDark)),
         const SizedBox(height: 16),
         const Text('Sin cierres importados', style: TextStyle(fontSize: 18,
@@ -328,7 +328,7 @@ class _DetalleSheet extends StatelessWidget {
             child: Row(children: [
               Container(width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: primaryDark.withOpacity(0.08), shape: BoxShape.circle),
+                  color: primaryDark.withAlpha(20), shape: BoxShape.circle),
                 child: const Icon(Icons.receipt_long, color: primaryDark, size: 20)),
               const SizedBox(width: 12),
               Expanded(
@@ -377,7 +377,7 @@ class _DetalleSheet extends StatelessWidget {
                         child: Row(children: [
                           Container(width: 38, height: 38,
                             decoration: BoxDecoration(
-                              color: primaryDark.withOpacity(0.1),
+                              color: primaryDark.withAlpha(26),
                               borderRadius: BorderRadius.circular(10)),
                             child: Center(child: Text(
                               item['nombre'].toString().substring(0, 1).toUpperCase(),
@@ -414,9 +414,9 @@ class _DetalleSheet extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withAlpha(20),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withAlpha(51)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: TextStyle(color: color, fontSize: 11,

@@ -60,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VaraNova-Admin-APK
-          path: build/app/outputs/flutter-apk/varanova-pos-admin.apk
+          path: build/app/outputs/flutter-apk/varanova-admin-caja.apk
 
       # ── SYMBOLS ARTIFACT ─────────────────────────────
       - name: Upload Symbols
