@@ -27,7 +27,7 @@ const Color _kCategBg    = Color(0xFF0D3B43);  // sidebar oscuro
 const Color _kAccent     = Color(0xFF1DE9B6);  // teal brillante para selección
 
 class PosSelectorScreen extends StatefulWidget {
-  /// Items actuales en la cuenta: Map<productoId, cantidad>
+
   /// Para mostrar badge de cantidad encima de cada card.
   final Map<int, double> itemsActuales;
 
